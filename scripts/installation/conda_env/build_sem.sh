@@ -1,4 +1,6 @@
-ROOT=${PWD} 
+set -euo -pipefail
+
+ROOT=${PWD}
 
 ### create conda environment ###
 conda create -n activegamer python=3.8 cmake=3.14.0
