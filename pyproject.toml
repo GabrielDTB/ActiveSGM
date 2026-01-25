@@ -2,7 +2,7 @@
 authors = [{name = "Gabriel Talbert Bunt", email = "gabe@dendry.net"}]
 dependencies = []
 name = "ActiveSGM"
-requires-python = ">= 3.11"
+requires-python = "== 3.8"
 version = "0.1.0"
 
 [build-system]
@@ -12,6 +12,7 @@ requires = ["hatchling"]
 [tool.pixi.workspace]
 channels = ["conda-forge"]
 platforms = ["linux-64"]
+preview = ["pixi-build"]
 
 [tool.pixi.pypi-dependencies]
 activesgm = { path = ".", editable = true }
@@ -23,8 +24,12 @@ cuda = "12.2"
 cuda-version = "12.2.*"
 
 [tool.pixi.dependencies]
+pyright = "*"
 pytorch-gpu = "*"
-basedpyright = ">=1.37.2,<2"
+cmake = "3.14.*"
+
+[tool.pixi.dependencies.habitat]
+git = "https://github.com/GabrielDTB/habitat-sim-hz"
 
 [tool.pixi.environments]
 viper = ["viper"]
