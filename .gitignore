@@ -3,4 +3,6 @@
 /data/checkpoint/
 /third_parties/
 *.bin
-*.pth
+*.pth# pixi environments
+.pixi/*
+!.pixi/config.toml

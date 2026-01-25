@@ -1,0 +1,31 @@
+[project]
+authors = [{name = "Gabriel Talbert Bunt", email = "gabe@dendry.net"}]
+dependencies = []
+name = "ActiveSGM"
+requires-python = ">= 3.11"
+version = "0.1.0"
+
+[build-system]
+build-backend = "hatchling.build"
+requires = ["hatchling"]
+
+[tool.pixi.workspace]
+channels = ["conda-forge"]
+platforms = ["linux-64"]
+
+[tool.pixi.pypi-dependencies]
+activesgm = { path = ".", editable = true }
+
+[tool.pixi.feature.viper.system-requirements]
+cuda = "12.2"
+
+[tool.pixi.feature.viper.dependencies]
+cuda-version = "12.2.*"
+
+[tool.pixi.dependencies]
+pytorch-gpu = "*"
+basedpyright = ">=1.37.2,<2"
+
+[tool.pixi.environments]
+viper = ["viper"]
+default = ["viper"]
