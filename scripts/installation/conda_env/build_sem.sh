@@ -1,4 +1,6 @@
-set -euo -pipefail
+#!/bin/bash
+
+set -euo pipefail
 
 ROOT=${PWD}
 
@@ -10,7 +12,9 @@ conda activate activegamer
 
 # ### Setup habitat-sim ###
 cd ${ROOT}/third_parties
-git clone git@github.com:Huangying-Zhan/habitat-sim.git habitat_sim
+if [ ! -d habitat_sim ]; then
+    git clone git@github.com:Huangying-Zhan/habitat-sim.git habitat_sim
+fi
 cd habitat_sim
 pip install -r requirements.txt
 python setup.py install --headless --bullet
