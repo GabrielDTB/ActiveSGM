@@ -59,14 +59,14 @@ def argument_parsing() -> argparse.Namespace:
 
     Returns:
         args: arguments
-        
+
     """
     parser = argparse.ArgumentParser(
             description="Arguments to run NARUTO."
         )
     parser.add_argument("--cfg", type=str, default="configs/default.py",
                         help="NARUTO config")
-    parser.add_argument("--result_dir", type=str, default=None, 
+    parser.add_argument("--result_dir", type=str, default=None,
                         help="result directory")
     parser.add_argument("--seed", type=int, default=None,
                         help="random seed; also used as the initial pose idx for Replica")
@@ -88,6 +88,6 @@ def load_cfg(args: argparse.Namespace) -> mmengine.Config:
         cfg : configuration
 
     """
-    cfg = mmengine.Config.fromfile(args.cfg)
+    cfg = mmengine.Config.fromfile(args.cfg, lazy_import=False)
     cfg = override_cfg(args, cfg)
     return cfg

@@ -38,7 +38,7 @@ from src.utils.general_utils import InfoPrinter, apply_colormap, create_class_co
 
 
 class HabitatSim(Simulator):
-    def __init__(self, 
+    def __init__(self,
                  main_cfg: mmengine.Config, info_printer: InfoPrinter,
                  disable_erp: bool =False, disable_pinhole: bool = False
                  ):
@@ -54,24 +54,24 @@ class HabitatSim(Simulator):
         """
         super(HabitatSim, self).__init__(main_cfg, info_printer)
 
-        cfg = mmengine.Config.fromfile(self.sim_cfg.habitat_cfg)
+        cfg = mmengine.Config.fromfile(self.sim_cfg.habitat_cfg, lazy_import=False)
 
         if disable_erp:
             cfg.camera.equirectangular.enable = False
-        
+
         if cfg.camera.equirectangular.enable:
             pano_hw = tuple(cfg.camera.equirectangular.resolution_hw)
-            self.erp_depth_to_erp_dist = ERPDepth2Dist(512, pano_hw, 'cuda') 
-        
+            self.erp_depth_to_erp_dist = ERPDepth2Dist(512, pano_hw, 'cuda')
+
         if disable_pinhole:
             cfg.camera.pinhole.enable = False
-        
+
         sim_cfg = make_configuration(cfg)
         sim = habitat_sim.Simulator(sim_cfg)
-        
+
         if "gravity" in cfg.simulator.physics:
             sim.set_gravity(cfg.simulator.physics.gravity)
-        
+
         if "object" in cfg:
             if cfg.object.enable:
                 simulate_objects(sim, cfg.object, cfg.agent)
@@ -79,19 +79,19 @@ class HabitatSim(Simulator):
         sim.step_physics(1.0)
         self.sim = sim
 
-    def simulate(self, 
+    def simulate(self,
                  c2w            : np.ndarray,
                  return_erp     : bool = False,
                  no_print       : bool = False,
                  return_semantic: bool = False,
                  ) -> Union[
-                     Tuple[torch.Tensor, torch.Tensor], 
-                     Tuple[torch.Tensor, torch.Tensor, torch.Tensor], 
+                     Tuple[torch.Tensor, torch.Tensor],
+                     Tuple[torch.Tensor, torch.Tensor, torch.Tensor],
                      Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor],
                      Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor],
                      ]:
         ''' Simulate and render the RGBD image with input c2w pose
-        
+
         Args:
             c2w            : 4x4 matrix pose in RUB coord.
             return_erp     : return ERP data
@@ -108,16 +108,16 @@ class HabitatSim(Simulator):
                 - erp_seman (torch.Tensor, [H,W])  : equirectangular semantic map.
         '''
         if not(no_print):
-            self.info_printer(f"Simulating at position [{c2w[0,3]:.3f}, {c2w[1,3]:.3f}, {c2w[2,3]:.3f}]", 
+            self.info_printer(f"Simulating at position [{c2w[0,3]:.3f}, {c2w[1,3]:.3f}, {c2w[2,3]:.3f}]",
                             self.step, self.__class__.__name__)
         ### simulate agent motion ###
         next_state = habitat_sim.agent.AgentState()
-        
+
         qut = quaternion.from_rotation_matrix(c2w[:3, :3])
         trans = c2w[:3, 3]
         next_state.position = trans
         next_state.rotation = qut
-        
+
         self.sim.agents[0].set_state(next_state)
 
         ### get frames ###
@@ -132,7 +132,7 @@ class HabitatSim(Simulator):
         if color is not None:
             color = color[:, :, :3] / 255.
             color = torch.from_numpy(color.astype(np.float32))
-        
+
         if depth is not None:
             depth = torch.from_numpy(depth.astype(np.float32))
 
@@ -143,7 +143,7 @@ class HabitatSim(Simulator):
             # seman = seman[:, :, :3] / 255.
 
             seman = torch.from_numpy(seman.astype(np.float32))
-        
+
         if return_erp:
             erp_color = obs.get('erp_color', None)
             erp_depth = obs.get('erp_depth', None)
@@ -152,25 +152,25 @@ class HabitatSim(Simulator):
             if erp_color is not None:
                 erp_color = erp_color[:, :, :3] / 255.
                 erp_color = torch.from_numpy(erp_color.astype(np.float32))
-            
+
             if erp_depth is not None:
                 erp_depth = torch.from_numpy(erp_depth.astype(np.float32))
                 # Set invalid depths to high values. It is more convenient in many situations than keeping them zero.
-                erp_depth[erp_depth==0] = 1e8   
+                erp_depth[erp_depth==0] = 1e8
                 erp_depth = self.erp_depth_to_erp_dist(erp_depth.unsqueeze(0).unsqueeze(0).to('cuda'))
-            
+
             if erp_seman is not None:
                 ### convert to colormap ###
                 # seman = apply_colormap(seman, colormap)
                 # seman = seman[:, :, :3] / 255.
 
                 seman = torch.from_numpy(seman.astype(np.float32))
-            
+
             if return_semantic:
                 return color, depth, seman, erp_color, erp_depth, erp_seman
-            
+
             return color, depth, erp_color, erp_depth
-        
+
         if return_semantic:
             return color, depth, seman
         else:
@@ -388,11 +388,11 @@ class HabitatSimV2(HabitatSim):
 
 
 
-    def plot_sim_img(self, 
+    def plot_sim_img(self,
                  c2w: np.ndarray,
-                 ) -> None: 
+                 ) -> None:
         """
-    
+
         Args:
             c2w: camera-to-world, RUB
         """
@@ -401,12 +401,12 @@ class HabitatSimV2(HabitatSim):
         rgb = self.simulate(c2w)['color']
         plt.imshow(rgb)
         plt.show()
-    
-    def plot_sim_depth(self, 
+
+    def plot_sim_depth(self,
                 c2w: np.ndarray,
-                ) -> None: 
+                ) -> None:
         """
-    
+
         Args:
             c2w: camera-to-world, RUB
         """
