@@ -25,7 +25,7 @@ SOFTWARE.
 
 import mmengine
 
-from src.utils.general_utils import InfoPrinter
+from ..utils.general_utils import InfoPrinter
 from tensorboardX import SummaryWriter
 
 

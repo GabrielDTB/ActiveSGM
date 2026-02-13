@@ -1,8 +1,9 @@
 [project]
-authors = [{name = "Gabriel Talbert Bunt", email = "gabe@dendry.net"}]
+# pls add other authors
+authors = [{name = "Liyan Chen", email = "lchen39@stevens.edu"}]
 dependencies = []
 name = "ActiveSGM"
-requires-python = ">=3.8,<3.9"
+requires-python = ">=3.9"
 version = "0.1.0"
 
 [build-system]
@@ -21,28 +22,43 @@ cuda = "12.2"
 cuda-version = "12.2.*"
 
 [tool.pixi.dependencies]
-pytorch = "1.13.1.*"
-torchvision = "0.14.1.*"
+torchvision = "*"
+pytorch3d = "*"
+tensorboardx = "*"
+numba = "*"
+mmengine = "*"
+scipy = "*"
+matplotlib = "*"
+tqdm = "*"
+pillow = "*"
+trimesh = "*"
+yaml = "*"
+open3d = "*"
+mediapy = "*"
+imgviz = "*"
+# For tinycudann
+setuptools = "*"
+pytorch-gpu = "*"
+numpy = "*"
+# For habitat-sim
+pip = "*"
+
+[tool.pixi.pypi-options]
+no-build-isolation = ["tinycudann", "habitat-sim"]
 
 [tool.pixi.pypi-dependencies]
+tinycudann = {git = "https://github.com/NVlabs/tiny-cuda-nn/", subdirectory = "bindings/torch"}
+habitat-sim = {git = "https://github.com/Huangying-Zhan/habitat-sim"}
+# splatam = {git = "https://github.com/spla-tam/SplaTAM"}
 attrs = ">=19.1.0"
 gitpython = "*"
 imageio = "*"
 imageio-ffmpeg = "*"
-matplotlib = "*"
-numba = "*"
-numpy = "*"
 numpy-quaternion = "*"
-pillow = "*"
-scipy = ">=1.3.0"
-tqdm = "*"
-pytorch3d = { git = "https://github.com/facebookresearch/pytorch3d.git", rev = "05cbea115acbbcbea77999c03d55155b23479991" }
 
-[tool.uv.extra-build-dependencies]
-pytorch3d = ["torch"]
-
-[tool.pixi.dependencies.habitat-sim]
-path = "../habitat-sim-hz/"
+[tool.pixi.activation.env]
+HEADLESS = "on"
+BULLET = "on"
 
 [tool.pixi.environments]
 viper = ["viper"]

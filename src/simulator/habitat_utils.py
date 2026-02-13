@@ -61,22 +61,34 @@ def init_camera_spec(
     Returns:
         cam_spec (habitat_sim.CameraSensorSpec): camera sensor spec
     """
+    print("before cam_spec")
     cam_spec = {
         'pinhole': habitat_sim.CameraSensorSpec(),
         'erp': habitat_sim.EquirectangularSensorSpec()
     }[cam_subtype]
+    print("after cam_spec")
     cam_spec.uuid = "{}_{}".format(cam_subtype, cam_type)
     cam_spec.uuid += "_{}".format(cam_id) if cam_id is not None else ""
+    print("before subtype")
     cam_spec.sensor_subtype = {
         'pinhole': habitat_sim.SensorSubType.PINHOLE,
         'erp': habitat_sim.SensorSubType.EQUIRECTANGULAR,
     }[cam_subtype]
+    print("before type")
     cam_spec.sensor_type = {
         'color': habitat_sim.SensorType.COLOR,
         'depth': habitat_sim.SensorType.DEPTH,
         'semantic': habitat_sim.SensorType.SEMANTIC
     }[cam_type]
+    print("after type")
+    print(cam_cfg.resolution_hw)
+    print(cam_spec)
+    print(vars(cam_spec))
+    print(cam_spec.uuid)
+    cam_spec.resolution = [680, 680]
+    print(cam_spec.resolution)
     cam_spec.resolution = cam_cfg.resolution_hw
+    print("after resolution")
     cam_spec.position = [0.0, 0.0, 0.0]
     cam_spec.orientation = orientation
     print(f"cam_type: [{cam_type}]; ori: [{orientation}]")
@@ -111,6 +123,7 @@ def setup_pinhole_cams(cam_cfg: mmengine.ConfigDict) -> List[habitat_sim.CameraS
             "down" : [-np.pi/2, 0.0, 0.0], # down
         }
     elif "horizontal" in cam_cfg.orientation_type:
+        print("in horizontal")
         delta_rot = 2 * np.pi / cam_cfg.horizontal.num_rot
         for i in range(cam_cfg.horizontal.num_rot):
             orientations["{:03}".format(np.round(np.rad2deg(delta_rot*i)))] = [0.0, delta_rot*i, 0.0]
@@ -118,11 +131,15 @@ def setup_pinhole_cams(cam_cfg: mmengine.ConfigDict) -> List[habitat_sim.CameraS
         orientations["up"] = [np.pi/2, 0.0, 0.0],  # up
         orientations["down"] = [-np.pi/2, 0.0, 0.0], # down
     else:
+        print("not implemented")
         raise NotImplementedError
     
     ### setup camera specs ###
+    print("before sensor specs")
     sensor_specs = []
     for ori_key, orientation in orientations.items():
+        print(ori_key, orientation)
+        print("cam cfg", cam_cfg)
         ### RGBA Camera ###
         if 'color' in cam_cfg.cam_type:
             cam_spec = init_camera_spec(
@@ -158,6 +175,7 @@ def setup_pinhole_cams(cam_cfg: mmengine.ConfigDict) -> List[habitat_sim.CameraS
                         cam_type    = "semantic"
                 )
             sensor_specs.append(cam_spec)
+    print("before return")
     return sensor_specs
 
 
@@ -338,13 +356,13 @@ def SixDOFPose2Mat(state: habitat_sim.SixDOFPose) -> np.ndarray:
     ''' 
         coordinate system transformation for camera pose
 
-        current system: [X: right; Y: up; Z: backward] 
+        current system: [X: right; Y: up; Z: backward]
         desired system: [X: right; Y: down; Z: forward]
 
         let the desired pose be T_w'c' (camera'-to-world')
         the current pose be T_wc
 
-        T_w'c'  = T_w'w @ T_wc @ T_cc' 
+        T_w'c'  = T_w'w @ T_wc @ T_cc'
                 = T_r @ T_wc @ (T_r)^-1
                 where T_r = [
                     1, 0, 0,  0

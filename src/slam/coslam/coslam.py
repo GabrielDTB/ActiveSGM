@@ -40,6 +40,7 @@ class CoSLAMNaruto(SlamModel, CoSLAM):
 
         ### CoSLAM Config loading and save ###
         config = load_config(self.slam_cfg.room_cfg)
+        print(config)
         config = self.override_config(config)
         self.config = config
         
@@ -53,6 +54,7 @@ class CoSLAMNaruto(SlamModel, CoSLAM):
 
         ### volume configs ###
         self.voxel_size = self.slam_cfg.voxel_size
+
 
         ### Initialize camera parameters and rays ###
         self.init_cam_rays(config)
@@ -102,6 +104,7 @@ class CoSLAMNaruto(SlamModel, CoSLAM):
         ### visualization ###
         cfg['mesh']['vis'] = self.main_cfg.visualizer.get('mesh_vis_freq', cfg['mesh']['vis'])
 
+        print("returning config")
         return cfg
     
     def init_active_ray_sampler(self):

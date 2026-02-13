@@ -27,14 +27,14 @@ import os
 import sys
 sys.path.append(os.getcwd())
 
-from src.data.pose_loader import habitat_pose_conversion, PoseLoader
-from src.naruto.cfg_loader import argument_parsing, load_cfg
-from src.planner import init_planner
-from src.slam import init_SLAM_model
-from src.simulator import init_simulator
-from src.utils.timer import Timer
-from src.utils.general_utils import fix_random_seed, InfoPrinter, update_module_step
-from src.visualization import init_visualizer
+from ..data.pose_loader import habitat_pose_conversion, PoseLoader
+from ..naruto.cfg_loader import argument_parsing, load_cfg
+from ..planner import init_planner
+from ..slam import init_SLAM_model
+from ..simulator import init_simulator
+from ..utils.timer import Timer
+from ..utils.general_utils import fix_random_seed, InfoPrinter, update_module_step
+from ..visualization import init_visualizer
 
 
 if __name__ == "__main__":
@@ -56,7 +56,7 @@ if __name__ == "__main__":
     ##################################################
     info_printer("Fix random seed...", 0, "Initialization")
     fix_random_seed(main_cfg.general.seed)
-    
+
     ##################################################
     ### initialize simulator
     ##################################################
@@ -98,7 +98,7 @@ if __name__ == "__main__":
         ##################################################
         c2w_slam = pose_loader.update_pose(c2w_slam, i)
         c2w_sim = c2w_slam.cpu().numpy().copy()
-        
+
         ##################################################
         ### Simulation
         ##################################################
@@ -107,7 +107,7 @@ if __name__ == "__main__":
         if main_cfg.visualizer.vis_rgbd:
             visualizer.visualize_rgbd(color, depth, slam.config["cam"]["depth_trunc"])
         timer.end("Simulation")
-        
+
         ##################################################
         ### save data for comprehensive visualization
         ##################################################
@@ -120,7 +120,7 @@ if __name__ == "__main__":
         timer.start("SLAM", "General")
         new_uncert_sdf_vols = slam.online_recon_step(i, color, depth, c2w_slam)
         timer.end("SLAM")
-        
+
         ##################################################
         ### Active Planning
         ##################################################
@@ -133,8 +133,8 @@ if __name__ == "__main__":
             else:
                 is_new_vols = False
             c2w_slam = planner.main(
-                uncert_sdf, 
-                c2w_slam.cpu().numpy(), 
+                uncert_sdf,
+                c2w_slam.cpu().numpy(),
                 is_new_vols
                 )
             timer.end("Planning")
