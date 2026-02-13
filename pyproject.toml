@@ -46,6 +46,9 @@ numpy = "*"
 # For habitat-sim
 pip = "*"
 
+[tool.pixi.feature.dev.dependencies]
+ruff = "*"
+
 [tool.pixi.pypi-options]
 no-build-isolation = ["tinycudann", "habitat-sim"]
 
@@ -65,4 +68,4 @@ BULLET = "on"
 
 [tool.pixi.environments]
 viper = ["viper"]
-default = ["viper"]
+default = ["viper", "dev"]
