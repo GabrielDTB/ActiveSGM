@@ -11,7 +11,7 @@ build-backend = "hatchling.build"
 requires = ["hatchling"]
 
 [tool.pixi.workspace]
-channels = ["conda-forge"]
+channels = ["conda-forge", "aihabitat"]
 platforms = ["linux-64"]
 preview = ["pixi-build"]
 
@@ -39,22 +39,24 @@ imgviz = "*"
 natsort = "*"
 opencv = "*"
 kornia = "*"
+marching_cubes = "*"
+# habitat-sim does this very funkily...
+habitat-sim = ">=0.3.3,<0.4"
+withbullet = ">=2.0,<3"
+headless = ">=2.0,<3"
 # For tinycudann
 setuptools = "*"
 pytorch-gpu = "*"
 numpy = "*"
-# For habitat-sim
-pip = "*"
 
 [tool.pixi.feature.dev.dependencies]
 ruff = "*"
 
 [tool.pixi.pypi-options]
-no-build-isolation = ["tinycudann", "habitat-sim"]
+no-build-isolation = ["tinycudann"]
 
 [tool.pixi.pypi-dependencies]
 tinycudann = {git = "https://github.com/NVlabs/tiny-cuda-nn/", subdirectory = "bindings/torch"}
-habitat-sim = {git = "https://github.com/Huangying-Zhan/habitat-sim"}
 # splatam = {git = "https://github.com/spla-tam/SplaTAM"}
 attrs = ">=19.1.0"
 gitpython = "*"
