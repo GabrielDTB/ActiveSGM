@@ -20,7 +20,7 @@ from third_parties.splatam.utils.slam_external import calc_psnr,calc_ssim
 
 ### original Splatam modules ###
 sys.path.append("third_parties/splatam")
-from scripts.splatam import get_dataset, initialize_camera_pose
+from third_parties.splatam.scripts.splatam import get_dataset, initialize_camera_pose
 from utils.slam_helpers import (
     matrix_to_quaternion, transform_to_frame, transformed_params2rendervar, transformed_params2depthplussilhouette
 )
@@ -157,28 +157,28 @@ class SemSplatam(SplatamOurs):
 
     def init_exploration_map(self, sim2slam: torch.tensor):
         """ initialize exploration map (grid)
-    
+
         Args:
             sim2slam: transformation that transform points from simulation coordinate system to SplaTAM system
-    
+
         Attributes:
             explr_map (ExplorationMap)
-            
+
         """
         self.explr_map = ExplorationMap(
-            self.slam_cfg.bbox_bound, 
-            self.slam_cfg.bbox_voxel_size, 
-            self.device, 
+            self.slam_cfg.bbox_bound,
+            self.slam_cfg.bbox_voxel_size,
+            self.device,
             sim2slam,
-            use_xyz_filter=True, 
-            xy_sampling_step=self.main_cfg.planner.xy_sampling_step[0], 
+            use_xyz_filter=True,
+            xy_sampling_step=self.main_cfg.planner.xy_sampling_step[0],
             gs_z_levels=self.main_cfg.planner.gs_z_levels[0]
             )
 
 
     def init_camera_parameters(self):
         """
-    
+
         Attributes:
             params: Splatam parameters
             variables: Splatam variables
@@ -188,7 +188,7 @@ class SemSplatam(SplatamOurs):
             densify_intrinsics
             densify_cam
             tracking_cam
-            
+
         """
         color, depth, intrinsics, pose = self.dataset_sample[0]
         _, seman = self.semantic_annotation(color)
@@ -217,9 +217,9 @@ class SemSplatam(SplatamOurs):
             # return params, variables, intrinsics, first_frame_w2c, cam
             self.densify_intrinsics = intrinsics
             self.densify_cam = cam
-        
+
         if self.seperate_tracking_res:
-            self.tracking_cam = setup_camera(self.tracking_color.shape[2], self.tracking_color.shape[1], 
+            self.tracking_cam = setup_camera(self.tracking_color.shape[2], self.tracking_color.shape[1],
                                         self.tracking_intrinsics.cpu().numpy(), first_frame_w2c.detach().cpu().numpy(),
                                              num_channels = self.n_cls)
 
@@ -228,13 +228,13 @@ class SemSplatam(SplatamOurs):
         self.intrinsics = intrinsics
         self.first_frame_w2c = first_frame_w2c
         self.cam = cam
-    
+
     @torch.no_grad()
     def render(self, c2w: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         ''' render rgb, mask, and depth based on a given pose
         Args:
             c2w: [4,4]. camera-to-world pose, in SplaTAM system
-        
+
         Returns:
             im: (C,H,W) # render image
             depth: (1,H,W) # render depth
@@ -266,9 +266,9 @@ class SemSplatam(SplatamOurs):
 
         # Initialize Render Variables
         rendervar = transformed_params2rendervar(params, transformed_gaussians)
-        depth_sil_rendervar = transformed_params2depthplussilhouette(params, first_frame_w2c, 
+        depth_sil_rendervar = transformed_params2depthplussilhouette(params, first_frame_w2c,
                                                                      transformed_gaussians)
-    
+
         im, radii, _, = Renderer(raster_settings=cam)(**rendervar)
         depth_sil, _, _, = Renderer(raster_settings=cam)(**depth_sil_rendervar)
         rastered_depth = depth_sil[0, :, :].unsqueeze(0)
@@ -328,7 +328,7 @@ class SemSplatam(SplatamOurs):
 
     def plot_render_depth(self, c2w: torch.Tensor):
         """ plot rendered depth at the given pose
-    
+
         Args:
             c2w: [4,4], camera-to-world, RDF
         """
@@ -336,10 +336,10 @@ class SemSplatam(SplatamOurs):
         depth = depth[0].detach().cpu().numpy()
         plt.imshow(depth)
         plt.show()
-    
+
     def plot_render_rgb(self, c2w: torch.Tensor):
         """ plot rendered RGB at the given pose
-    
+
         Args:
             c2w: [4,4], camera-to-world, RDF
         """
@@ -348,7 +348,7 @@ class SemSplatam(SplatamOurs):
         plt.imshow(im)
         plt.show()
 
-    def online_recon_step(self, 
+    def online_recon_step(self,
                           time_idx        : int,
                           color           : torch.Tensor,
                           depth           : torch.Tensor,
@@ -366,7 +366,7 @@ class SemSplatam(SplatamOurs):
             c2w             : pose. Format: RUB camera-to-world, [4,4]
             force_map_update: run map update if true
             only_use_global_keyframe: post-refinement stage
-        
+
         Returns:
         '''
         if time_idx == 0:
@@ -379,18 +379,18 @@ class SemSplatam(SplatamOurs):
         if self.slam_cfg.enable_active_planning:
             self.update_explr_map(time_idx, depth, c2w, force_map_update)
 
-    def update_global_keyframe_set_completeness(self, depth, c2w, thre, 
+    def update_global_keyframe_set_completeness(self, depth, c2w, thre,
                                    time_idx, curr_gt_w2c, dont_add_kf, num_frames, force_map_update, config):
         """
-    
+
         Args:
-            
-    
+
+
         Returns:
-            
-    
+
+
         Attributes:
-            
+
         """
         if not(dont_add_kf):
             if ((time_idx == 0) or ((time_idx+1) % config['keyframe_every'] == 0) or \
@@ -413,19 +413,19 @@ class SemSplatam(SplatamOurs):
     def update_global_keyframe_set_quality(self, color, depth, c2w, color_thre, depth_thre,
                                    time_idx, curr_gt_w2c, dont_add_kf, num_frames, force_map_update, config):
         """
-    
+
         Args:
-            
-    
+
+
         Returns:
-            
-    
+
+
         Attributes:
-            
+
         """
         if time_idx in self.global_keyframe_time_indices:
-            return 
-        
+            return
+
         if not(dont_add_kf):
             if ((time_idx == 0) or ((time_idx+1) % config['keyframe_every'] == 0) or \
                         (time_idx == num_frames-2)) and (not torch.isinf(curr_gt_w2c[-1]).any()) and (not torch.isnan(curr_gt_w2c[-1]).any()) or force_map_update:
@@ -433,7 +433,7 @@ class SemSplatam(SplatamOurs):
                     render_color, render_depth, _, _ = self.render(c2w)
                     valid_depth_mask = depth > 0
                     color_ig = calc_psnr(render_color*valid_depth_mask, color*valid_depth_mask).mean()
-                    depth_ig = (torch.abs(render_depth*valid_depth_mask - depth*valid_depth_mask)/(depth+1e-8)).sum() / valid_depth_mask.sum() 
+                    depth_ig = (torch.abs(render_depth*valid_depth_mask - depth*valid_depth_mask)/(depth+1e-8)).sum() / valid_depth_mask.sum()
 
                     ### FIXME: update is_global_kf condition ###
                     is_global_kf = color_ig < color_thre
@@ -444,20 +444,20 @@ class SemSplatam(SplatamOurs):
                         self.global_keyframe_indices.append(len(self.keyframe_list))
                         self.global_keyframe_time_indices.append(time_idx)
 
-    def update_global_keyframe_set_quality_rel(self, 
+    def update_global_keyframe_set_quality_rel(self,
                                             #   color, depth, c2w, color_thre, depth_thre,
                                             #     time_idx, curr_gt_w2c, dont_add_kf, num_frames, force_map_update, config
                                                 ):
         """
-    
+
         Args:
-            
-    
+
+
         Returns:
-            
-    
+
+
         Attributes:
-            
+
         """
         ### Render All KFs, excluding last few (5) keyframes (due to overfitting) ###
         color_igs = []
@@ -513,7 +513,7 @@ class SemSplatam(SplatamOurs):
                            depth           : torch.Tensor,
                            c2w             : torch.Tensor,
                            force_map_update: bool = False,
-                         ) -> List         : 
+                         ) -> List         :
         ''' Run one step of the co-slam process.
 
         Args:
@@ -521,7 +521,7 @@ class SemSplatam(SplatamOurs):
             depth           : depth map,    [H,W]
             c2w             : pose. Format: RUB camera-to-world, [4,4]
             force_map_update: run map update if true
-        
+
         Attributes:
             explr_map: update exploration map
         '''
@@ -530,15 +530,15 @@ class SemSplatam(SplatamOurs):
         c2w = c2w.to(self.device)
         if time_idx == 0 or (time_idx+1) % config['map_every'] == 0 or force_map_update:
             self.explr_map.update_from_depth_map(
-                depth, 
-                self.intrinsics, 
+                depth,
+                self.intrinsics,
                 torch.inverse(c2w),
                 self.slam_cfg.surface_dist_thre,
                 self.slam_cfg.get("find_free_indices_bs", 10000)
                 )
 
 
-    def update_gs_map(self, 
+    def update_gs_map(self,
                           time_idx: int,
                           color   : torch.Tensor,
                           depth   : torch.Tensor,
@@ -606,14 +606,14 @@ class SemSplatam(SplatamOurs):
         # Initialize Mapping Data for selected frame
         curr_data = {'cam': cam, 'im': color, 'depth': depth, 'seman': seman, 'id': iter_time_idx, 'intrinsics': intrinsics,
                      'w2c': first_frame_w2c, 'iter_gt_w2c_list': curr_gt_w2c}
-        
+
         # # Initialize Data for Tracking
         if seperate_tracking_res:
             ### Load tracking data ###
             tracking_h, tracking_w = self.config['data']["tracking_image_height"], self.config['data']["tracking_image_width"]
             tracking_color = F.interpolate(color.unsqueeze(0), (tracking_h, tracking_w), mode='bilinear')[0]
             tracking_depth = F.interpolate(depth.unsqueeze(0), (tracking_h, tracking_w), mode='nearest')[0]
-            
+
             tracking_curr_data = {'cam': tracking_cam, 'im': tracking_color, 'depth': tracking_depth, 'id': iter_time_idx,
                                   'intrinsics': tracking_intrinsics, 'w2c': first_frame_w2c, 'iter_gt_w2c_list': curr_gt_w2c}
         else:
@@ -621,7 +621,7 @@ class SemSplatam(SplatamOurs):
 
         # Optimization Iterations
         num_iters_mapping = config['mapping']['num_iters']
-        
+
         # Initialize the camera pose for the current frame
         if time_idx > 0:
             params = initialize_camera_pose(params, time_idx, forward_prop=config['tracking']['forward_prop'])
@@ -647,7 +647,7 @@ class SemSplatam(SplatamOurs):
                 # Loss for current frame
                 loss, variables, losses = get_loss_with_seman(params, tracking_curr_data, variables, iter_time_idx, config['tracking']['loss_weights'],
                                                    config['tracking']['use_sil_for_loss'], config['tracking']['sil_thres'],
-                                                   config['tracking']['use_l1'], config['tracking']['ignore_outlier_depth_loss'], tracking=True, 
+                                                   config['tracking']['use_l1'], config['tracking']['ignore_outlier_depth_loss'], tracking=True,
                                                    plot_dir=eval_dir, visualize_tracking_loss=config['tracking']['visualize_tracking_loss'],
                                                    tracking_iteration=iter)
                 if config['use_wandb']:
@@ -734,8 +734,8 @@ class SemSplatam(SplatamOurs):
         ##################################################
         if self.slam_cfg.use_global_keyframe and not(only_use_global_keyframe):
             self.update_global_keyframe_set_completeness(
-                depth, c2w, 
-                self.slam_cfg.global_keyframe.completeness_thre, 
+                depth, c2w,
+                self.slam_cfg.global_keyframe.completeness_thre,
                 time_idx, curr_gt_w2c, dont_add_kf, num_frames, force_map_update, config
             )
 
@@ -765,7 +765,7 @@ class SemSplatam(SplatamOurs):
                 if config['use_wandb']:
                     wandb_run.log({"Mapping/Number of Gaussians": post_num_pts,
                                    "Mapping/step": wandb_time_step})
-            
+
             with torch.no_grad():
                 # Get the current estimated rotation & translation
                 curr_cam_rot = F.normalize(params['cam_unnorm_rots'][..., time_idx].detach())
@@ -794,7 +794,7 @@ class SemSplatam(SplatamOurs):
                     if self.slam_cfg.use_global_keyframe:
                         global_keyframe_time_indices = [frame_idx for frame_idx in self.global_keyframe_time_indices if frame_idx != time_idx]
                         print(f"\nGlobal Keyframes at Frame {time_idx}: {global_keyframe_time_indices}")
-                
+
             # Reset Optimizer & Learning Rates for Full Map Optimization
             optimizer = initialize_optimizer(params, config['mapping']['lrs'], tracking=False)
 
@@ -856,7 +856,7 @@ class SemSplatam(SplatamOurs):
                             iter_crop_mask = get_uncert_mask(iter_seman, filter_pct=0.1,thres= self.slam_cfg['uncert_mask_thres'])
                             keyframe_list[selected_rand_keyframe_idx]['crop_mask'] = iter_crop_mask
 
-                
+
                 iter_gt_w2c = self.gt_w2c_all_frames[:iter_time_idx+1]
                 iter_data = {'cam': cam, 'im': iter_color, 'depth': iter_depth, 'seman': iter_seman, 'id': iter_time_idx,
                              'intrinsics': intrinsics, 'w2c': first_frame_w2c, 'iter_gt_w2c_list': iter_gt_w2c}
@@ -941,9 +941,9 @@ class SemSplatam(SplatamOurs):
             quality_method = self.slam_cfg.global_keyframe.get("quality_method", "absolute")
             if quality_method == "absolute":
                 self.update_global_keyframe_set_quality(
-                    color, depth, c2w, 
-                    self.slam_cfg.global_keyframe.color_thre, 
-                    self.slam_cfg.global_keyframe.depth_thre, 
+                    color, depth, c2w,
+                    self.slam_cfg.global_keyframe.color_thre,
+                    self.slam_cfg.global_keyframe.depth_thre,
                     time_idx, curr_gt_w2c, dont_add_kf, num_frames, force_map_update, config
                 )
             elif quality_method == "relative":
@@ -951,7 +951,7 @@ class SemSplatam(SplatamOurs):
                     self.update_global_keyframe_set_quality_rel()
             else:
                 raise NotImplementedError
-        
+
         # Add frame to keyframe list
         if not(dont_add_kf):
             if ((time_idx == 0) or ((time_idx+1) % config['keyframe_every'] == 0) or \
@@ -968,7 +968,7 @@ class SemSplatam(SplatamOurs):
                     # Add to keyframe list
                     keyframe_list.append(curr_keyframe)
                     keyframe_time_indices.append(time_idx)
-        
+
         # Checkpoint every iteration
         if time_idx % config["checkpoint_interval"] == 0 and config['save_checkpoints']:
             ckpt_output_dir = os.path.join(config["workdir"], config["run_name"])
@@ -976,13 +976,13 @@ class SemSplatam(SplatamOurs):
             save_semantic_ply(params,variables,ckpt_output_dir, time_idx, self.n_cls)
             save_rgb_ply(params,ckpt_output_dir, time_idx)
             np.save(os.path.join(ckpt_output_dir, f"keyframe_time_indices{time_idx}.npy"), np.array(keyframe_time_indices))
-        
+
         # Increment WandB Time Step
         if config['use_wandb']:
             self.wandb_time_step += 1
 
         # torch.cuda.empty_cache()
-        
+
         ##################################################
         ### update self variables
         ##################################################
@@ -1005,7 +1005,7 @@ class SemSplatam(SplatamOurs):
         if self.seperate_tracking_res:
             self.tracking_cam = tracking_cam
             self.tracking_intrinsics = tracking_intrinsics
-        
+
         self.keyframe_list = keyframe_list
         self.num_frames = num_frames
         self.keyframe_time_indices = keyframe_time_indices
@@ -1064,7 +1064,7 @@ class SemSplatam(SplatamOurs):
                         "Final Stats/Average Mapping Iteration Time (ms)": mapping_iter_time_avg*1000,
                         "Final Stats/Average Mapping Frame Time (s)": mapping_frame_time_avg,
                         "Final Stats/step": 1})
-        
+
         # Evaluate Final Parameters
         with torch.no_grad():
             if config['use_wandb']:
@@ -1129,7 +1129,7 @@ class SemSplatam(SplatamOurs):
 
     def eval_result(self, eval_dir_suffix="", ignore_first_frame = False, save_frames=False):
         """ evaluate rendering results
-            
+
         """
         ### get self variables ###
         params = self.params
@@ -1221,7 +1221,7 @@ class SemSplatam(SplatamOurs):
                      add_new_gaussians=config['mapping']['add_new_gaussians'],
                      eval_every=1, ignore_first_frame=ignore_first_frame, save_frames=save_frames)
         return
-    
+
     def update_dict_recursive(self, dict1, dict2):
         """
         Recursively updates the values of dict1 with the values from dict2.
@@ -1238,7 +1238,7 @@ class SemSplatam(SplatamOurs):
             if key not in dict1:
                 ### Raise an error if key in dict2 is not found in dict1
                 raise KeyError(f"Key '{key}' not found in dict1.")
-    
+
             if isinstance(value, dict) and key in dict1 and isinstance(dict1[key], dict):
                 ### If both dict1[key] and dict2[key] are dictionaries, recursively update them
                 dict1[key] = self.update_dict_recursive(dict1[key], value)
@@ -1248,7 +1248,7 @@ class SemSplatam(SplatamOurs):
         return dict1
 
     def override_config(self, config: Dict) -> Dict:
-        """ override configs 
+        """ override configs
         """
         ### override from main_cfg ###
         config["data"]["sequence"] = self.main_cfg.general.scene
@@ -1273,19 +1273,19 @@ class SemSplatam(SplatamOurs):
         print(f"{config}")
 
         return config
-    
+
     def update_prev_keyframes(self):
         """ update last stored keyframe indexs
-    
+
         Attributes:
             prev_keyframe_idxs (List): last stored keyframe indexs
-            
+
         """
         self.prev_keyframe_idxs = self.keyframe_time_indices.copy()
 
     def get_new_keyframe_idxs(self) -> torch.Tensor:
         """ get new keyframe indexs
-    
+
         Returns:
             new_kf: [N], mask for new keyframes
         """
@@ -1301,4 +1301,3 @@ class SemSplatam(SplatamOurs):
         unique_new_kf_mask = ~mask
 
         return unique_new_kf_mask
-

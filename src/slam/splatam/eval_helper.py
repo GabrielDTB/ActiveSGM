@@ -11,11 +11,11 @@ from pytorch_msssim import ms_ssim
 from torchmetrics.image.lpip import LearnedPerceptualImagePatchSimilarity
 
 sys.path.append("third_parties/splatam")
-from datasets.gradslam_datasets.geometryutils import relative_transformation
+from third_parties.splatam.datasets.gradslam_datasets.geometryutils import relative_transformation
 from utils.recon_helpers import setup_camera
 from utils.slam_external import build_rotation, calc_psnr
 from utils.slam_helpers import (
-    # transform_to_frame, 
+    # transform_to_frame,
     transformed_params2rendervar, transformed_params2depthplussilhouette,
     quat_mult, matrix_to_quaternion
 )
@@ -27,13 +27,13 @@ loss_fn_alex = LearnedPerceptualImagePatchSimilarity(net_type='alex', normalize=
 def transform_to_frame(params, time_idx, gaussians_grad, camera_grad, rel_w2c=None):
     """
     Function to transform Isotropic or Anisotropic Gaussians from world frame to camera frame.
-    
+
     Args:
         params: dict of parameters
         time_idx: time index to transform to
         gaussians_grad: enable gradients for Gaussians
         camera_grad: enable gradients for camera pose
-    
+
     Returns:
         transformed_gaussians: Transformed Gaussians (dict containing means3D & unnorm_rotations)
     """
@@ -54,7 +54,7 @@ def transform_to_frame(params, time_idx, gaussians_grad, camera_grad, rel_w2c=No
         transform_rots = False # Isotropic Gaussians
     else:
         transform_rots = True # Anisotropic Gaussians
-    
+
     # Get Centers and Unnorm Rots of Gaussians in World Frame
     if gaussians_grad:
         pts = params['means3D']
@@ -62,7 +62,7 @@ def transform_to_frame(params, time_idx, gaussians_grad, camera_grad, rel_w2c=No
     else:
         pts = params['means3D'].detach()
         unnorm_rots = params['unnorm_rotations'].detach()
-    
+
     transformed_gaussians = {}
     # Transform Centers of Gaussians to Camera Frame
     pts_ones = torch.ones(pts.shape[0], 1).cuda().float()
@@ -84,11 +84,11 @@ def resize_tensor(image, target_height, target_width, mode='bilinear'):
     return F.interpolate(image.unsqueeze(0), size=(target_height, target_width), mode=mode).squeeze(0)
 
 def plot_rgbd_silhouette_fast(color, depth, rastered_color, rastered_depth, presence_sil_mask, diff_depth_l1,
-                         psnr, depth_l1, fig_title, plot_dir=None, plot_name=None, 
-                         save_plot=False, wandb_run=None, wandb_step=None, wandb_title=None, 
-                         diff_rgb=None, 
-                         target_res=(256, 256), use_nearest_interp=True):        
-        
+                         psnr, depth_l1, fig_title, plot_dir=None, plot_name=None,
+                         save_plot=False, wandb_run=None, wandb_step=None, wandb_title=None,
+                         diff_rgb=None,
+                         target_res=(256, 256), use_nearest_interp=True):
+
     # Resize images for faster plotting if target_res is provided
     mode = 'nearest' if use_nearest_interp else 'bilinear'
     color = resize_tensor(color, *target_res, mode=mode)
@@ -116,7 +116,7 @@ def plot_rgbd_silhouette_fast(color, depth, rastered_color, rastered_depth, pres
     else:
         # Resize presence_sil_mask to match the target resolution
         presence_sil_mask_np = cv2.resize(presence_sil_mask.astype(np.uint8) * 255, target_res, interpolation=cv2.INTER_NEAREST)
-        
+
         # Convert the 2D mask to 3D by repeating the mask across the RGB channels (H, W) -> (H, W, 3)
         presence_sil_mask_np = np.stack([presence_sil_mask_np] * 3, axis=-1)
 
@@ -131,7 +131,7 @@ def plot_rgbd_silhouette_fast(color, depth, rastered_color, rastered_depth, pres
     if save_plot and plot_dir is not None and plot_name is not None:
         save_path = os.path.join(plot_dir, f"{plot_name}.png")
         cv2.imwrite(save_path, cv2.cvtColor(final_image, cv2.COLOR_RGB2BGR))  # Convert RGB to BGR for OpenCV
-    
+
     if wandb_run is not None:
         if wandb_step is None:
             wandb_run.log({wandb_title: final_image})
@@ -146,7 +146,7 @@ def plot_rgbd_silhouette_fast(color, depth, rastered_color, rastered_depth, pres
 # plot_rgbd_silhouette(color, depth, rastered_color, rastered_depth, presence_sil_mask, diff_depth_l1, psnr, depth_l1, fig
 
 
-def eval(dataset, final_params, num_frames, eval_dir, sil_thres, 
+def eval(dataset, final_params, num_frames, eval_dir, sil_thres,
          mapping_iters, add_new_gaussians, wandb_run=None, wandb_save_qual=False, eval_every=1, save_frames=False,
          ignore_first_frame = False):
     print("Evaluating Final Parameters ...")
@@ -185,21 +185,21 @@ def eval(dataset, final_params, num_frames, eval_dir, sil_thres,
             first_frame_w2c = torch.linalg.inv(pose)
             # Setup Camera
             cam = setup_camera(color.shape[2], color.shape[1], intrinsics.cpu().numpy(), first_frame_w2c.detach().cpu().numpy())
-        
+
         # Skip frames if not eval_every
         if time_idx != 0 and (time_idx+1) % eval_every != 0:
             continue
 
         # Get current frame Gaussians
-        # transformed_gaussians = transform_to_frame(final_params, time_idx, 
-        #                                            gaussians_grad=False, 
+        # transformed_gaussians = transform_to_frame(final_params, time_idx,
+        #                                            gaussians_grad=False,
         #                                            camera_grad=False)
-        transformed_gaussians = transform_to_frame(final_params, time_idx, 
-                                                   gaussians_grad=False, 
+        transformed_gaussians = transform_to_frame(final_params, time_idx,
+                                                   gaussians_grad=False,
                                                    camera_grad=False,
                                                    rel_w2c=gt_w2c
                                                    )
- 
+
         # Define current frame data
         curr_data = {'cam': cam, 'im': color, 'depth': depth, 'id': time_idx, 'intrinsics': intrinsics, 'w2c': first_frame_w2c}
 
@@ -217,7 +217,7 @@ def eval(dataset, final_params, num_frames, eval_dir, sil_thres,
         rastered_depth = rastered_depth * valid_depth_mask
         silhouette = depth_sil[1, :, :]
         presence_sil_mask = (silhouette > sil_thres)
-        
+
         # Render RGB and Calculate PSNR
         im, radius, _, = Renderer(raster_settings=curr_data['cam'])(**rendervar)
         if mapping_iters==0 and not add_new_gaussians:
@@ -227,7 +227,7 @@ def eval(dataset, final_params, num_frames, eval_dir, sil_thres,
             weighted_im = im * valid_depth_mask
             weighted_gt_im = curr_data['im'] * valid_depth_mask
         psnr = calc_psnr(weighted_im, weighted_gt_im).mean()
-        ssim = ms_ssim(weighted_im.unsqueeze(0).cpu(), weighted_gt_im.unsqueeze(0).cpu(), 
+        ssim = ms_ssim(weighted_im.unsqueeze(0).cpu(), weighted_gt_im.unsqueeze(0).cpu(),
                         data_range=1.0, size_average=True)
         lpips_score = loss_fn_alex(torch.clamp(weighted_im.unsqueeze(0), 0.0, 1.0),
                                     torch.clamp(weighted_gt_im.unsqueeze(0), 0.0, 1.0)).item()
@@ -278,20 +278,20 @@ def eval(dataset, final_params, num_frames, eval_dir, sil_thres,
             depth_colormap = cv2.applyColorMap((normalized_depth * 255).astype(np.uint8), cv2.COLORMAP_JET)
             cv2.imwrite(os.path.join(rgb_dir, "gt_{:04d}.png".format(time_idx)), cv2.cvtColor(viz_gt_im*255, cv2.COLOR_RGB2BGR))
             cv2.imwrite(os.path.join(depth_dir, "gt_{:04d}.png".format(time_idx)), depth_colormap)
-        
+
         # Plot the Ground Truth and Rasterized RGB & Depth, along with Silhouette
         fig_title = "Time Step: {}".format(time_idx)
         plot_name = "%04d" % time_idx
         presence_sil_mask = presence_sil_mask.detach().cpu().numpy()
         if wandb_run is None:
             plot_rgbd_silhouette_fast(color, depth, im, rastered_depth_viz, presence_sil_mask, diff_depth_l1,
-                                 psnr, depth_l1, fig_title, plot_dir, 
+                                 psnr, depth_l1, fig_title, plot_dir,
                                  plot_name=plot_name, save_plot=True)
         elif wandb_save_qual:
             plot_rgbd_silhouette_fast(color, depth, im, rastered_depth_viz, presence_sil_mask, diff_depth_l1,
-                                 psnr, depth_l1, fig_title, plot_dir, 
+                                 psnr, depth_l1, fig_title, plot_dir,
                                  plot_name=plot_name, save_plot=True,
-                                 wandb_run=wandb_run, wandb_step=None, 
+                                 wandb_run=wandb_run, wandb_step=None,
                                  wandb_title="Eval/Qual Viz")
 
     try:
@@ -325,7 +325,7 @@ def eval(dataset, final_params, num_frames, eval_dir, sil_thres,
     except:
         ate_rmse = 100.0
         print('Failed to evaluate trajectory with alignment.')
-    
+
     # Compute Average Metrics
     psnr_list = np.array(psnr_list)
     rmse_list = np.array(rmse_list)
@@ -344,10 +344,10 @@ def eval(dataset, final_params, num_frames, eval_dir, sil_thres,
     print("Average LPIPS: {:.3f}".format(avg_lpips))
 
     if wandb_run is not None:
-        wandb_run.log({"Final Stats/Average PSNR": avg_psnr, 
+        wandb_run.log({"Final Stats/Average PSNR": avg_psnr,
                        "Final Stats/Average Depth RMSE": avg_rmse,
                        "Final Stats/Average Depth L1": avg_l1,
-                       "Final Stats/Average MS-SSIM": avg_ssim, 
+                       "Final Stats/Average MS-SSIM": avg_ssim,
                        "Final Stats/Average LPIPS": avg_lpips,
                        "Final Stats/step": 1})
 
@@ -382,9 +382,9 @@ def eval(dataset, final_params, num_frames, eval_dir, sil_thres,
         wandb_run.log({"Eval/Metrics": fig})
     plt.close()
 
-def report_progress(params, data, i, progress_bar, iter_time_idx, sil_thres, every_i=1, qual_every_i=1, 
+def report_progress(params, data, i, progress_bar, iter_time_idx, sil_thres, every_i=1, qual_every_i=1,
                     tracking=False, mapping=False, wandb_run=None, wandb_step=None, wandb_save_qual=False, online_time_idx=None,
-                    global_logging=True, 
+                    global_logging=True,
                     eval_dir=None):
     if i % every_i == 0 or i == 1:
         if wandb_run is not None:
@@ -401,7 +401,7 @@ def report_progress(params, data, i, progress_bar, iter_time_idx, sil_thres, eve
             # Get list of gt poses
             gt_w2c_list = data['iter_gt_w2c_list']
             valid_gt_w2c_list = []
-            
+
             # Get latest trajectory
             latest_est_w2c = data['w2c']
             latest_est_w2c_list = []
@@ -432,23 +432,23 @@ def report_progress(params, data, i, progress_bar, iter_time_idx, sil_thres, eve
                 rel_pt_error = torch.sqrt((rel_gt_w2c[0,3] - rel_est_w2c[0,3])**2 + (rel_gt_w2c[1,3] - rel_est_w2c[1,3])**2 + (rel_gt_w2c[2,3] - rel_est_w2c[2,3])**2)
             else:
                 rel_pt_error = torch.zeros(1).float()
-            
+
             # Calculate ATE RMSE
             ate_rmse = evaluate_ate(gt_w2c_list, latest_est_w2c_list)
             ate_rmse = np.round(ate_rmse, decimals=6)
             if wandb_run is not None:
-                tracking_log = {f"{stage}/Latest Pose Error":iter_pt_error, 
+                tracking_log = {f"{stage}/Latest Pose Error":iter_pt_error,
                                f"{stage}/Latest Relative Pose Error":rel_pt_error,
                                f"{stage}/ATE RMSE":ate_rmse}
 
         # Get current frame Gaussians
-        transformed_gaussians = transform_to_frame(params, iter_time_idx, 
+        transformed_gaussians = transform_to_frame(params, iter_time_idx,
                                                    gaussians_grad=False,
                                                    camera_grad=False)
 
         # Initialize Render Variables
         rendervar = transformed_params2rendervar(params, transformed_gaussians)
-        depth_sil_rendervar = transformed_params2depthplussilhouette(params, data['w2c'], 
+        depth_sil_rendervar = transformed_params2depthplussilhouette(params, data['w2c'],
                                                                      transformed_gaussians)
         depth_sil, _, _, = Renderer(raster_settings=data['cam'])(**depth_sil_rendervar)
         rastered_depth = depth_sil[0, :, :].unsqueeze(0)
@@ -486,7 +486,7 @@ def report_progress(params, data, i, progress_bar, iter_time_idx, sil_thres, eve
         elif mapping:
             progress_bar.set_postfix({f"Time-Step: {online_time_idx} | Frame {data['id']} | PSNR: {psnr:.{7}} | Depth RMSE: {rmse:.{7}} | L1": f"{depth_l1:.{7}}"})
             progress_bar.update(every_i)
-        
+
         if wandb_run is not None:
             wandb_log = {f"{stage}/PSNR": psnr,
                          f"{stage}/Depth RMSE": rmse,
@@ -495,7 +495,7 @@ def report_progress(params, data, i, progress_bar, iter_time_idx, sil_thres, eve
             if tracking:
                 wandb_log = {**wandb_log, **tracking_log}
             wandb_run.log(wandb_log)
-        
+
         # Silhouette Mask
         presence_sil_mask = presence_sil_mask.detach().cpu().numpy()
         if wandb_save_qual and (i % qual_every_i == 0 or i == 1):
@@ -506,7 +506,7 @@ def report_progress(params, data, i, progress_bar, iter_time_idx, sil_thres, eve
             else:
                 fig_title = f"Time-Step: {online_time_idx} | Iter: {i} | Frame: {data['id']}"
             plot_rgbd_silhouette(data['im'], data['depth'], im, rastered_depth, presence_sil_mask, diff_depth_l1,
-                                 psnr, depth_l1, fig_title, wandb_run=wandb_run, wandb_step=wandb_step, 
+                                 psnr, depth_l1, fig_title, wandb_run=wandb_run, wandb_step=wandb_step,
                                  wandb_title=f"{stage} Qual Viz")
         elif eval_dir is not None:
             plot_name = "%04d" % online_time_idx
@@ -514,5 +514,5 @@ def report_progress(params, data, i, progress_bar, iter_time_idx, sil_thres, eve
             plot_dir = os.path.join(eval_dir, "plots_progress")
             os.makedirs(plot_dir, exist_ok=True)
             plot_rgbd_silhouette_fast(data['im'], data['depth'], im, rastered_depth, presence_sil_mask, diff_depth_l1,
-                                 psnr, depth_l1, fig_title, plot_dir, 
+                                 psnr, depth_l1, fig_title, plot_dir,
                                  plot_name=plot_name, save_plot=True)

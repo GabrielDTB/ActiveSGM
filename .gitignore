@@ -8,6 +8,7 @@
 !.pixi/config.toml
 
 /data/
+/results/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

@@ -27,18 +27,16 @@ from src.slam.splatam.exploration_map import ExplorationMap
 
 from third_parties.splatam.utils.slam_external import calc_psnr
 
-### original Splatam modules ###
-sys.path.append("third_parties/splatam")
-from scripts.splatam import initialize_first_timestep, get_dataset, initialize_camera_pose, initialize_optimizer, get_loss, add_new_gaussians
-from datasets.gradslam_datasets import (load_dataset_config,)
-from utils.recon_helpers import setup_camera
-from utils.slam_helpers import (
+from third_parties.splatam.scripts.splatam import initialize_first_timestep, get_dataset, initialize_camera_pose, initialize_optimizer, get_loss, add_new_gaussians
+from third_parties.splatam.datasets.gradslam_datasets import (load_dataset_config,)
+from third_parties.splatam.utils.recon_helpers import setup_camera
+from third_parties.splatam.utils.slam_helpers import (
     matrix_to_quaternion, transform_to_frame, transformed_params2rendervar, transformed_params2depthplussilhouette
 )
-from utils.keyframe_selection import keyframe_selection_overlap
-from utils.slam_external import calc_ssim, build_rotation, prune_gaussians, densify
-from utils.eval_helpers import report_loss#, report_progress
-from utils.common_utils import save_params_ckpt, save_params
+from third_parties.splatam.utils.keyframe_selection import keyframe_selection_overlap
+from third_parties.splatam.utils.slam_external import calc_ssim, build_rotation, prune_gaussians, densify
+from third_parties.splatam.utils.eval_helpers import report_loss#, report_progress
+from third_parties.splatam.utils.common_utils import save_params_ckpt, save_params
 
 # modified version
 from src.slam.splatam.modified_ver.scripts.splatam import *
@@ -90,7 +88,7 @@ class SplatamOurs(SlamModel):
         if not self.config['load_checkpoint']:
             os.makedirs(self.results_dir, exist_ok=True)
             shutil.copy(self.slam_cfg.room_cfg, os.path.join(self.results_dir, "config.py"))
-        
+
 
         # Initialize list to keep track of Keyframes
         self.keyframe_list = []
@@ -115,30 +113,30 @@ class SplatamOurs(SlamModel):
         ### load checkpoint ###
         if self.config['load_checkpoint']:
             self.load_checkpoint()
-        
+
     def init_exploration_map(self, sim2slam: torch.tensor):
         """ initialize exploration map (grid)
-    
+
         Args:
             sim2slam: transformation that transform points from simulation coordinate system to SplaTAM system
-    
+
         Attributes:
             explr_map (ExplorationMap)
-            
+
         """
         self.explr_map = ExplorationMap(
-            self.slam_cfg.bbox_bound, 
-            self.slam_cfg.bbox_voxel_size, 
-            self.device, 
+            self.slam_cfg.bbox_bound,
+            self.slam_cfg.bbox_voxel_size,
+            self.device,
             sim2slam,
-            use_xyz_filter=True, 
-            xy_sampling_step=self.main_cfg.planner.xy_sampling_step[0], 
+            use_xyz_filter=True,
+            xy_sampling_step=self.main_cfg.planner.xy_sampling_step[0],
             gs_z_levels=self.main_cfg.planner.gs_z_levels[0]
             )
 
     def load_params(self, stage="final"):
         """ load checkpoint parameters
-    
+
         Attributes:
             params: SplaTAM parameters
         """
@@ -153,10 +151,10 @@ class SplatamOurs(SlamModel):
         params = dict(np.load(ckpt_path, allow_pickle=True))
         params = {k: torch.tensor(params[k]).cuda().float().requires_grad_(True) for k in params.keys()}
         self.params = params
-    
+
     def load_checkpoint(self):
         """ load checkpoint
-    
+
         Attributes:
             variables: Splatam variables
             gt_w2c_all_frames: GT world to camera pose
@@ -206,7 +204,7 @@ class SplatamOurs(SlamModel):
                 curr_keyframe = {'id': time_idx, 'est_w2c': curr_w2c, 'color': color, 'depth': depth}
                 # Add to keyframe list
                 keyframe_list.append(curr_keyframe)
-        
+
         self.variables = variables
         self.gt_w2c_all_frames = gt_w2c_all_frames
         self.keyframe_list = keyframe_list
@@ -234,7 +232,7 @@ class SplatamOurs(SlamModel):
             gradslam_data_cfg["dataset_name"] = dataset_config["dataset_name"]
         else:
             gradslam_data_cfg = load_dataset_config(dataset_config["gradslam_data_cfg"])
-        
+
         if "ignore_bad" not in dataset_config:
             dataset_config["ignore_bad"] = False
 
@@ -262,7 +260,7 @@ class SplatamOurs(SlamModel):
                 self.seperate_tracking_res = True
             else:
                 self.seperate_tracking_res = False
-        
+
         ### obtain sample dataset  ###
         self.dataset_sample = get_dataset(
             config_dict=gradslam_data_cfg,
@@ -329,7 +327,7 @@ class SplatamOurs(SlamModel):
 
     def init_camera_parameters(self):
         """
-    
+
         Attributes:
             params: Splatam parameters
             variables: Splatam variables
@@ -339,7 +337,7 @@ class SplatamOurs(SlamModel):
             densify_intrinsics
             densify_cam
             tracking_cam
-            
+
         """
         if self.seperate_densification_res:
             # Initialize Parameters, Canonical & Densification Camera parameters
@@ -348,23 +346,23 @@ class SplatamOurs(SlamModel):
                                                                                  self.config['scene_radius_depth_ratio'],
                                                                                  self.config['mean_sq_dist_method'],
                                                                                  densify_dataset=self.densify_dataset_sample,
-                                                                                 gaussian_distribution=self.config['gaussian_distribution'])                                                                                                                  
+                                                                                 gaussian_distribution=self.config['gaussian_distribution'])
             # return params, variables, intrinsics, first_frame_w2c, cam, \
             #     densify_intrinsics, densify_cam
             self.densify_intrinsics = densify_intrinsics
             self.densify_cam = densify_cam
         else:
             # Initialize Parameters & Canoncial Camera parameters
-            params, variables, intrinsics, first_frame_w2c, cam = initialize_first_timestep(self.dataset_sample, self.num_frames, 
+            params, variables, intrinsics, first_frame_w2c, cam = initialize_first_timestep(self.dataset_sample, self.num_frames,
                                                                                             self.config['scene_radius_depth_ratio'],
                                                                                             self.config['mean_sq_dist_method'],
                                                                                             gaussian_distribution=self.config['gaussian_distribution'])
             # return params, variables, intrinsics, first_frame_w2c, cam
             self.densify_intrinsics = intrinsics
             self.densify_cam = cam
-        
+
         if self.seperate_tracking_res:
-            self.tracking_cam = setup_camera(self.tracking_color.shape[2], self.tracking_color.shape[1], 
+            self.tracking_cam = setup_camera(self.tracking_color.shape[2], self.tracking_color.shape[1],
                                         self.tracking_intrinsics.cpu().numpy(), first_frame_w2c.detach().cpu().numpy())
 
         self.params = params
@@ -392,13 +390,13 @@ class SplatamOurs(SlamModel):
             else:
                 params[k] = torch.nn.Parameter(v.cuda().float().contiguous().requires_grad_(True))
         return params
-    
+
     @torch.no_grad()
     def render(self, c2w: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         ''' render rgb, mask, and depth based on a given pose
         Args:
             c2w: [4,4]. camera-to-world pose, in SplaTAM system
-        
+
         Returns:
             im: (H,W,3) # render image
             depth: (H,W) # render depth
@@ -430,9 +428,9 @@ class SplatamOurs(SlamModel):
 
         # Initialize Render Variables
         rendervar = transformed_params2rendervar(params, transformed_gaussians)
-        depth_sil_rendervar = transformed_params2depthplussilhouette(params, first_frame_w2c, 
+        depth_sil_rendervar = transformed_params2depthplussilhouette(params, first_frame_w2c,
                                                                      transformed_gaussians)
-    
+
         im, _, _, = Renderer(raster_settings=cam)(**rendervar)
         depth_sil, _, _, = Renderer(raster_settings=cam)(**depth_sil_rendervar)
         rastered_depth = depth_sil[0, :, :].unsqueeze(0)
@@ -446,7 +444,7 @@ class SplatamOurs(SlamModel):
 
     def plot_render_depth(self, c2w: torch.Tensor):
         """ plot rendered depth at the given pose
-    
+
         Args:
             c2w: [4,4], camera-to-world, RDF
         """
@@ -454,10 +452,10 @@ class SplatamOurs(SlamModel):
         depth = depth[0].detach().cpu().numpy()
         plt.imshow(depth)
         plt.show()
-    
+
     def plot_render_rgb(self, c2w: torch.Tensor):
         """ plot rendered RGB at the given pose
-    
+
         Args:
             c2w: [4,4], camera-to-world, RDF
         """
@@ -466,7 +464,7 @@ class SplatamOurs(SlamModel):
         plt.imshow(im)
         plt.show()
 
-    def online_recon_step(self, 
+    def online_recon_step(self,
                           time_idx        : int,
                           color           : torch.Tensor,
                           depth           : torch.Tensor,
@@ -484,7 +482,7 @@ class SplatamOurs(SlamModel):
             c2w             : pose. Format: RUB camera-to-world, [4,4]
             force_map_update: run map update if true
             only_use_global_keyframe: post-refinement stage
-        
+
         Returns:
         '''
         if time_idx==0:
@@ -492,18 +490,18 @@ class SplatamOurs(SlamModel):
         self.update_gs_map(time_idx, color, depth, c2w, force_map_update, dont_add_kf, only_use_global_keyframe)
         self.update_explr_map(time_idx, depth, c2w, force_map_update)
 
-    def update_global_keyframe_set_completeness(self, depth, c2w, thre, 
+    def update_global_keyframe_set_completeness(self, depth, c2w, thre,
                                    time_idx, curr_gt_w2c, dont_add_kf, num_frames, force_map_update, config):
         """
-    
+
         Args:
-            
-    
+
+
         Returns:
-            
-    
+
+
         Attributes:
-            
+
         """
         if not(dont_add_kf):
             if ((time_idx == 0) or ((time_idx+1) % config['keyframe_every'] == 0) or \
@@ -526,19 +524,19 @@ class SplatamOurs(SlamModel):
     def update_global_keyframe_set_quality(self, color, depth, c2w, color_thre, depth_thre,
                                    time_idx, curr_gt_w2c, dont_add_kf, num_frames, force_map_update, config):
         """
-    
+
         Args:
-            
-    
+
+
         Returns:
-            
-    
+
+
         Attributes:
-            
+
         """
         if time_idx in self.global_keyframe_time_indices:
-            return 
-        
+            return
+
         if not(dont_add_kf):
             if ((time_idx == 0) or ((time_idx+1) % config['keyframe_every'] == 0) or \
                         (time_idx == num_frames-2)) and (not torch.isinf(curr_gt_w2c[-1]).any()) and (not torch.isnan(curr_gt_w2c[-1]).any()) or force_map_update:
@@ -546,7 +544,7 @@ class SplatamOurs(SlamModel):
                     render_color, render_depth, _ = self.render(c2w)
                     valid_depth_mask = depth > 0
                     color_ig = calc_psnr(render_color*valid_depth_mask, color*valid_depth_mask).mean()
-                    depth_ig = (torch.abs(render_depth*valid_depth_mask - depth*valid_depth_mask)/(depth+1e-8)).sum() / valid_depth_mask.sum() 
+                    depth_ig = (torch.abs(render_depth*valid_depth_mask - depth*valid_depth_mask)/(depth+1e-8)).sum() / valid_depth_mask.sum()
 
                     ### FIXME: update is_global_kf condition ###
                     is_global_kf = color_ig < color_thre
@@ -557,20 +555,20 @@ class SplatamOurs(SlamModel):
                         self.global_keyframe_indices.append(len(self.keyframe_list))
                         self.global_keyframe_time_indices.append(time_idx)
 
-    def update_global_keyframe_set_quality_rel(self, 
+    def update_global_keyframe_set_quality_rel(self,
                                             #   color, depth, c2w, color_thre, depth_thre,
                                             #     time_idx, curr_gt_w2c, dont_add_kf, num_frames, force_map_update, config
                                                 ):
         """
-    
+
         Args:
-            
-    
+
+
         Returns:
-            
-    
+
+
         Attributes:
-            
+
         """
         ### Render All KFs, excluding last few (5) keyframes (due to overfitting) ###
         color_igs = []
@@ -582,7 +580,7 @@ class SplatamOurs(SlamModel):
             valid_depth_mask = kf['depth'] > 0.2 # FIXME: 0.2 is near culling range
             color_ig = calc_psnr(color*valid_depth_mask, kf['color']*valid_depth_mask).mean()
             color_igs.append(color_ig)
-        
+
         if len(color_igs) > 0:
             ### compute weighted Refinement I.G., weighted by distance ###
             color_igs = torch.stack(color_igs).float()
@@ -603,7 +601,7 @@ class SplatamOurs(SlamModel):
                            depth           : torch.Tensor,
                            c2w             : torch.Tensor,
                            force_map_update: bool = False,
-                         ) -> List         : 
+                         ) -> List         :
         ''' Run one step of the co-slam process.
 
         Args:
@@ -611,7 +609,7 @@ class SplatamOurs(SlamModel):
             depth           : depth map,    [H,W]
             c2w             : pose. Format: RUB camera-to-world, [4,4]
             force_map_update: run map update if true
-        
+
         Attributes:
             explr_map: update exploration map
         '''
@@ -620,19 +618,19 @@ class SplatamOurs(SlamModel):
         c2w = c2w.to(self.device)
         if time_idx == 0 or (time_idx+1) % config['map_every'] == 0 or force_map_update:
             self.explr_map.update_from_depth_map(
-                depth, 
-                self.intrinsics, 
+                depth,
+                self.intrinsics,
                 torch.inverse(c2w),
                 self.slam_cfg.surface_dist_thre,
                 self.slam_cfg.get("find_free_indices_bs", 10000)
                 )
-            
+
             ## FIXME: debug visualization ##
             # self.explr_map.visualize(time_idx, in_slam_world=False)
             # ckpt_output_dir = os.path.join(config["workdir"], config["run_name"])
             # save_params_ckpt(self.params, ckpt_output_dir, time_idx)
 
-    def update_gs_map(self, 
+    def update_gs_map(self,
                           time_idx: int,
                           color   : torch.Tensor,
                           depth   : torch.Tensor,
@@ -692,16 +690,16 @@ class SplatamOurs(SlamModel):
 
 
         # Initialize Mapping Data for selected frame
-        curr_data = {'cam': cam, 'im': color, 'depth': depth, 'id': iter_time_idx, 'intrinsics': intrinsics, 
+        curr_data = {'cam': cam, 'im': color, 'depth': depth, 'id': iter_time_idx, 'intrinsics': intrinsics,
                      'w2c': first_frame_w2c, 'iter_gt_w2c_list': curr_gt_w2c}
-        
+
         # # Initialize Data for Tracking
         if seperate_tracking_res:
             ### Load tracking data ###
             tracking_h, tracking_w = self.config['data']["tracking_image_height"], self.config['data']["tracking_image_width"]
             tracking_color = F.interpolate(color.unsqueeze(0), (tracking_h, tracking_w), mode='bilinear')[0]
             tracking_depth = F.interpolate(depth.unsqueeze(0), (tracking_h, tracking_w), mode='nearest')[0]
-            
+
             tracking_curr_data = {'cam': tracking_cam, 'im': tracking_color, 'depth': tracking_depth, 'id': iter_time_idx,
                                   'intrinsics': tracking_intrinsics, 'w2c': first_frame_w2c, 'iter_gt_w2c_list': curr_gt_w2c}
         else:
@@ -709,7 +707,7 @@ class SplatamOurs(SlamModel):
 
         # Optimization Iterations
         num_iters_mapping = config['mapping']['num_iters']
-        
+
         # Initialize the camera pose for the current frame
         if time_idx > 0:
             params = initialize_camera_pose(params, time_idx, forward_prop=config['tracking']['forward_prop'])
@@ -735,7 +733,7 @@ class SplatamOurs(SlamModel):
                 # Loss for current frame
                 loss, variables, losses = get_loss(params, tracking_curr_data, variables, iter_time_idx, config['tracking']['loss_weights'],
                                                    config['tracking']['use_sil_for_loss'], config['tracking']['sil_thres'],
-                                                   config['tracking']['use_l1'], config['tracking']['ignore_outlier_depth_loss'], tracking=True, 
+                                                   config['tracking']['use_l1'], config['tracking']['ignore_outlier_depth_loss'], tracking=True,
                                                    plot_dir=eval_dir, visualize_tracking_loss=config['tracking']['visualize_tracking_loss'],
                                                    tracking_iteration=iter)
                 if config['use_wandb']:
@@ -821,8 +819,8 @@ class SplatamOurs(SlamModel):
         ##################################################
         if self.slam_cfg.use_global_keyframe and not(only_use_global_keyframe):
             self.update_global_keyframe_set_completeness(
-                depth, c2w, 
-                self.slam_cfg.global_keyframe.completeness_thre, 
+                depth, c2w,
+                self.slam_cfg.global_keyframe.completeness_thre,
                 time_idx, curr_gt_w2c, dont_add_kf, num_frames, force_map_update, config
             )
 
@@ -839,20 +837,20 @@ class SplatamOurs(SlamModel):
                     densify_color = F.interpolate(color.unsqueeze(0), (densify_h, densify_w), mode='bilinear')[0]
                     densify_depth = F.interpolate(depth.unsqueeze(0), (densify_h, densify_w), mode='nearest')[0]
 
-                    densify_curr_data = {'cam': densify_cam, 'im': densify_color, 'depth': densify_depth, 'id': time_idx, 
+                    densify_curr_data = {'cam': densify_cam, 'im': densify_color, 'depth': densify_depth, 'id': time_idx,
                                  'intrinsics': densify_intrinsics, 'w2c': first_frame_w2c, 'iter_gt_w2c_list': curr_gt_w2c}
                 else:
                     densify_curr_data = curr_data
 
                 # Add new Gaussians to the scene based on the Silhouette
-                params, variables = add_new_gaussians(params, variables, densify_curr_data, 
+                params, variables = add_new_gaussians(params, variables, densify_curr_data,
                                                       config['mapping']['sil_thres'], time_idx,
                                                       config['mean_sq_dist_method'], config['gaussian_distribution'])
                 post_num_pts = params['means3D'].shape[0]
                 if config['use_wandb']:
                     wandb_run.log({"Mapping/Number of Gaussians": post_num_pts,
                                    "Mapping/step": wandb_time_step})
-            
+
             with torch.no_grad():
                 # Get the current estimated rotation & translation
                 curr_cam_rot = F.normalize(params['cam_unnorm_rots'][..., time_idx].detach())
@@ -881,9 +879,9 @@ class SplatamOurs(SlamModel):
                     if self.slam_cfg.use_global_keyframe:
                         global_keyframe_time_indices = [frame_idx for frame_idx in self.global_keyframe_time_indices if frame_idx != time_idx]
                         print(f"\nGlobal Keyframes at Frame {time_idx}: {global_keyframe_time_indices}")
-                
+
             # Reset Optimizer & Learning Rates for Full Map Optimization
-            optimizer = initialize_optimizer(params, config['mapping']['lrs'], tracking=False) 
+            optimizer = initialize_optimizer(params, config['mapping']['lrs'], tracking=False)
 
             # Mapping
             mapping_start_time = time.time()
@@ -925,9 +923,9 @@ class SplatamOurs(SlamModel):
                         iter_color = keyframe_list[selected_rand_keyframe_idx]['color']
                         iter_depth = keyframe_list[selected_rand_keyframe_idx]['depth']
 
-                
+
                 iter_gt_w2c = self.gt_w2c_all_frames[:iter_time_idx+1]
-                iter_data = {'cam': cam, 'im': iter_color, 'depth': iter_depth, 'id': iter_time_idx, 
+                iter_data = {'cam': cam, 'im': iter_color, 'depth': iter_depth, 'id': iter_time_idx,
                              'intrinsics': intrinsics, 'w2c': first_frame_w2c, 'iter_gt_w2c_list': iter_gt_w2c}
                 # Loss for current frame
                 loss, variables, losses = get_loss(params, iter_data, variables, iter_time_idx, config['mapping']['loss_weights'],
@@ -957,11 +955,11 @@ class SplatamOurs(SlamModel):
                     # Report Progress
                     if config['report_iter_progress']:
                         if config['use_wandb']:
-                            report_progress(params, iter_data, iter+1, progress_bar, iter_time_idx, sil_thres=config['mapping']['sil_thres'], 
+                            report_progress(params, iter_data, iter+1, progress_bar, iter_time_idx, sil_thres=config['mapping']['sil_thres'],
                                             wandb_run=wandb_run, wandb_step=wandb_mapping_step, wandb_save_qual=config['wandb']['save_qual'],
                                             mapping=True, online_time_idx=time_idx)
                         else:
-                            report_progress(params, iter_data, iter+1, progress_bar, iter_time_idx, sil_thres=config['mapping']['sil_thres'], 
+                            report_progress(params, iter_data, iter+1, progress_bar, iter_time_idx, sil_thres=config['mapping']['sil_thres'],
                                             mapping=True, online_time_idx=time_idx)
                     else:
                         progress_bar.update(1)
@@ -982,11 +980,11 @@ class SplatamOurs(SlamModel):
                     progress_bar = tqdm(range(1), desc=f"Mapping Result Time Step: {time_idx}")
                     with torch.no_grad():
                         if config['use_wandb']:
-                            report_progress(params, curr_data, 1, progress_bar, time_idx, sil_thres=config['mapping']['sil_thres'], 
+                            report_progress(params, curr_data, 1, progress_bar, time_idx, sil_thres=config['mapping']['sil_thres'],
                                             wandb_run=wandb_run, wandb_step=wandb_time_step, wandb_save_qual=config['wandb']['save_qual'],
                                             mapping=True, online_time_idx=time_idx, global_logging=True)
                         else:
-                            report_progress(params, curr_data, 1, progress_bar, time_idx, sil_thres=config['mapping']['sil_thres'], 
+                            report_progress(params, curr_data, 1, progress_bar, time_idx, sil_thres=config['mapping']['sil_thres'],
                                             eval_dir=self.eval_dir,
                                             mapping=True, online_time_idx=time_idx)
                     progress_bar.close()
@@ -1003,9 +1001,9 @@ class SplatamOurs(SlamModel):
             quality_method = self.slam_cfg.global_keyframe.get("quality_method", "absolute")
             if quality_method == "absolute":
                 self.update_global_keyframe_set_quality(
-                    color, depth, c2w, 
-                    self.slam_cfg.global_keyframe.color_thre, 
-                    self.slam_cfg.global_keyframe.depth_thre, 
+                    color, depth, c2w,
+                    self.slam_cfg.global_keyframe.color_thre,
+                    self.slam_cfg.global_keyframe.depth_thre,
                     time_idx, curr_gt_w2c, dont_add_kf, num_frames, force_map_update, config
                 )
             elif quality_method == "relative":
@@ -1013,7 +1011,7 @@ class SplatamOurs(SlamModel):
                     self.update_global_keyframe_set_quality_rel()
             else:
                 raise NotImplementedError
-        
+
         # Add frame to keyframe list
         if not(dont_add_kf):
             if ((time_idx == 0) or ((time_idx+1) % config['keyframe_every'] == 0) or \
@@ -1031,20 +1029,20 @@ class SplatamOurs(SlamModel):
                     keyframe_list.append(curr_keyframe)
                     keyframe_time_indices.append(time_idx)
 
-                    
-        
+
+
         # Checkpoint every iteration
         if time_idx % config["checkpoint_interval"] == 0 and config['save_checkpoints']:
             ckpt_output_dir = os.path.join(config["workdir"], config["run_name"])
             save_params_ckpt(params, ckpt_output_dir, time_idx)
             np.save(os.path.join(ckpt_output_dir, f"keyframe_time_indices{time_idx}.npy"), np.array(keyframe_time_indices))
-        
+
         # Increment WandB Time Step
         if config['use_wandb']:
             self.wandb_time_step += 1
 
         torch.cuda.empty_cache()
-        
+
         ##################################################
         ### update self variables
         ##################################################
@@ -1068,7 +1066,7 @@ class SplatamOurs(SlamModel):
         if self.seperate_tracking_res:
             self.tracking_cam = tracking_cam
             self.tracking_intrinsics = tracking_intrinsics
-        
+
         self.keyframe_list = keyframe_list
         self.num_frames = num_frames
         self.keyframe_time_indices = keyframe_time_indices
@@ -1102,7 +1100,7 @@ class SplatamOurs(SlamModel):
 
         ### prune gaussians ###
         if is_prune_gaussians:
-            optimizer = initialize_optimizer(params, config['mapping']['lrs'], tracking=False) 
+            optimizer = initialize_optimizer(params, config['mapping']['lrs'], tracking=False)
             params, variables = prune_gaussians(params, variables, optimizer, 0, config['mapping']['pruning_dict'])
 
 
@@ -1127,7 +1125,7 @@ class SplatamOurs(SlamModel):
                         "Final Stats/Average Mapping Iteration Time (ms)": mapping_iter_time_avg*1000,
                         "Final Stats/Average Mapping Frame Time (s)": mapping_frame_time_avg,
                         "Final Stats/step": 1})
-        
+
         # Evaluate Final Parameters
         with torch.no_grad():
             if config['use_wandb']:
@@ -1153,14 +1151,14 @@ class SplatamOurs(SlamModel):
             params['gt_w2c_all_frames'].append(gt_w2c_tensor.detach().cpu().numpy())
         params['gt_w2c_all_frames'] = np.stack(params['gt_w2c_all_frames'], axis=0)
         params['keyframe_time_indices'] = np.array(keyframe_time_indices)
-        
+
         # Save Parameters
         results_dir = os.path.join(self.results_dir, eval_dir_suffix) if eval_dir_suffix else self.results_dir
         save_params(params, results_dir)
 
     def eval_result(self, eval_dir_suffix="", ignore_first_frame = False, save_frames=False):
         """ evaluate rendering results
-            
+
         """
         ### get self variables ###
         params = self.params
@@ -1185,7 +1183,7 @@ class SplatamOurs(SlamModel):
                     mapping_iters=config['mapping']['num_iters'], add_new_gaussians=config['mapping']['add_new_gaussians'],
                     eval_every=config['eval_every'], ignore_first_frame=ignore_first_frame, save_frames=save_frames)
         return
-    
+
     def update_dict_recursive(self, dict1, dict2):
         """
         Recursively updates the values of dict1 with the values from dict2.
@@ -1202,7 +1200,7 @@ class SplatamOurs(SlamModel):
             if key not in dict1:
                 ### Raise an error if key in dict2 is not found in dict1
                 raise KeyError(f"Key '{key}' not found in dict1.")
-    
+
             if isinstance(value, dict) and key in dict1 and isinstance(dict1[key], dict):
                 ### If both dict1[key] and dict2[key] are dictionaries, recursively update them
                 dict1[key] = self.update_dict_recursive(dict1[key], value)
@@ -1212,7 +1210,7 @@ class SplatamOurs(SlamModel):
         return dict1
 
     def override_config(self, config: Dict) -> Dict:
-        """ override configs 
+        """ override configs
         """
         ### override from main_cfg ###
         config["data"]["sequence"] = self.main_cfg.general.scene
@@ -1237,19 +1235,19 @@ class SplatamOurs(SlamModel):
         print(f"{config}")
 
         return config
-    
+
     def update_prev_keyframes(self):
         """ update last stored keyframe indexs
-    
+
         Attributes:
             prev_keyframe_idxs (List): last stored keyframe indexs
-            
+
         """
         self.prev_keyframe_idxs = self.keyframe_time_indices.copy()
 
     def get_new_keyframe_idxs(self) -> torch.Tensor:
         """ get new keyframe indexs
-    
+
         Returns:
             new_kf: [N], mask for new keyframes
         """
@@ -1265,4 +1263,3 @@ class SplatamOurs(SlamModel):
         unique_new_kf_mask = ~mask
 
         return unique_new_kf_mask
-

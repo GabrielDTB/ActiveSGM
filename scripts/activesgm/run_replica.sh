@@ -1,9 +1,11 @@
 #!/bin/bash
 ##################################################
-### This script is to run the full NARUTO system 
-### (active planning and active ray sampling) 
+### This script is to run the full NARUTO system
+### (active planning and active ray sampling)
 ###  on the Replica dataset.
 ##################################################
+
+set -euo pipefail
 
 # Input arguments
 scene=${1:-office0}
@@ -20,8 +22,8 @@ RESULT_DIR=${PROJ_DIR}/results/
 
 ##################################################
 ### Random Seed
-###     also used to initialize agent pose 
-###     from indexing the pose in Replica SLAM 
+###     also used to initialize agent pose
+###     from indexing the pose in Replica SLAM
 ###     trajectory.
 ##################################################
 seeds=(0 500 1000 1500 1999)
@@ -54,7 +56,7 @@ do
 
         ### run experiment ###
         CFG=configs/${DATASET}/${scene}/${EXP}.py
-       python src/main/activesgm.py --cfg ${CFG} --seed ${seed} --result_dir ${result_dir} --enable_vis ${ENABLE_VIS}
+        python -m src.main.activesgm --cfg ${CFG} --seed ${seed} --result_dir ${result_dir} --enable_vis ${ENABLE_VIS}
 
         ### 3D Reconstruction evaluation ###
         DASHSCENE=${scene: 0: 0-1}_${scene: 0-1}

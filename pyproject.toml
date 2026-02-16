@@ -40,6 +40,11 @@ natsort = "*"
 opencv = "*"
 kornia = "*"
 marching_cubes = "*"
+plyfile = "*"
+wandb = "*"
+pytorch-msssim = "*"
+torchmetrics = "*"
+transformers = "*"
 # habitat-sim does this very funkily...
 habitat-sim = ">=0.3.3,<0.4"
 withbullet = ">=2.0,<3"
@@ -53,10 +58,11 @@ numpy = "*"
 ruff = "*"
 
 [tool.pixi.pypi-options]
-no-build-isolation = ["tinycudann"]
+no-build-isolation = ["tinycudann", "diff_gaussian_rasterization"]
 
 [tool.pixi.pypi-dependencies]
 tinycudann = {git = "https://github.com/NVlabs/tiny-cuda-nn/", subdirectory = "bindings/torch"}
+diff_gaussian_rasterization = {git = "https://github.com/JonathonLuiten/diff-gaussian-rasterization-w-depth"}
 # splatam = {git = "https://github.com/spla-tam/SplaTAM"}
 attrs = ">=19.1.0"
 gitpython = "*"
