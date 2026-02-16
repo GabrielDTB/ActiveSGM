@@ -1,7 +1,7 @@
 *.xml
 *.iml
 /data/checkpoint/
-/third_parties/
+#/third_parties/
 *.bin
 *.pth# pixi environments
 .pixi/*

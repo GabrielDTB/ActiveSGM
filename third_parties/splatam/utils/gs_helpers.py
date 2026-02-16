@@ -6,8 +6,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 
-from utils.recon_helpers import setup_camera
-from utils.slam_external import build_rotation,calc_psnr
+from .recon_helpers import setup_camera
+from .slam_external import build_rotation,calc_psnr
 
 from diff_gaussian_rasterization import GaussianRasterizer as Renderer
 
@@ -70,8 +70,8 @@ def align(model, data):
 
 def evaluate_ate(gt_traj, est_traj):
     """
-    Input : 
-        gt_traj: list of 4x4 matrices 
+    Input :
+        gt_traj: list of 4x4 matrices
         est_traj: list of 4x4 matrices
         len(gt_traj) == len(est_traj)
     """
@@ -268,7 +268,7 @@ def get_depth_and_silhouette(pts_3D, w2c):
     depth_silhouette[:, 0] = depth_z.squeeze(-1)
     depth_silhouette[:, 1] = 1.0
     depth_silhouette[:, 2] = depth_z_sq.squeeze(-1)
-    
+
     return depth_silhouette
 
 
@@ -299,13 +299,13 @@ def transformed_params2depthplussilhouette(params, w2c, transformed_pts):
 def transform_to_frame(params, time_idx, gaussians_grad, camera_grad):
     """
     Function to transform Isotropic Gaussians from world frame to camera frame.
-    
+
     Args:
         params: dict of parameters
         time_idx: time index to transform to
         gaussians_grad: enable gradients for Gaussians
         camera_grad: enable gradients for camera pose
-    
+
     Returns:
         transformed_pts: Transformed Centers of Gaussians
     """
@@ -325,7 +325,7 @@ def transform_to_frame(params, time_idx, gaussians_grad, camera_grad):
         pts = params['means3D']
     else:
         pts = params['means3D'].detach()
-    
+
     # Transform Centers and Unnorm Rots of Gaussians to Camera Frame
     pts_ones = torch.ones(pts.shape[0], 1).cuda().float()
     pts4 = torch.cat((pts, pts_ones), dim=1)
@@ -354,14 +354,14 @@ def report_loss(losses, wandb_run, wandb_step, tracking=False, mapping=False):
         for k, v in loss_dict.items():
             frame_opt_loss_dict[f"Current Frame Optimization {k}"] = v
         wandb_run.log(frame_opt_loss_dict, step=wandb_step)
-    
+
     # Increment wandb step
     wandb_step += 1
     return wandb_step
-        
+
 
 def plot_rgbd_silhouette(color, depth, rastered_color, rastered_depth, presence_sil_mask, diff_depth_rmse,
-                         psnr, rmse, fig_title, plot_dir=None, plot_name=None, 
+                         psnr, rmse, fig_title, plot_dir=None, plot_name=None,
                          save_plot=False, wandb_run=None, wandb_step=None, wandb_title=None):
     # Determine Plot Aspect Ratio
     aspect_ratio = color.shape[2] / color.shape[1]
@@ -399,7 +399,7 @@ def plot_rgbd_silhouette(color, depth, rastered_color, rastered_depth, presence_
     plt.close()
 
 
-def report_progress(params, data, i, progress_bar, iter_time_idx, sil_thres, every_i=1, qual_every_i=1, 
+def report_progress(params, data, i, progress_bar, iter_time_idx, sil_thres, every_i=1, qual_every_i=1,
                     tracking=False, mapping=False, wandb_run=None, wandb_step=None, wandb_save_qual=False, online_time_idx=None):
     if i % every_i == 0 or i == 1:
         if wandb_run is not None:
@@ -442,10 +442,10 @@ def report_progress(params, data, i, progress_bar, iter_time_idx, sil_thres, eve
         else:
             progress_bar.set_postfix({f"Time-Step: {online_time_idx} | Frame {data['id']} | PSNR: {psnr:.{7}} | RMSE": f"{rmse:.{7}}"})
             progress_bar.update(every_i)
-        
+
         if wandb_run is not None:
             wandb_run.log({f"{stage} PSNR": psnr, f"{stage} RMSE": rmse}, step=wandb_step)
-        
+
         if wandb_save_qual and (i % qual_every_i == 0 or i == 1):
             # Silhouette Mask
             presence_sil_mask = presence_sil_mask.detach().cpu().numpy()
@@ -456,7 +456,7 @@ def report_progress(params, data, i, progress_bar, iter_time_idx, sil_thres, eve
             else:
                 fig_title = f"Time-Step: {online_time_idx} | Iter: {i} | Frame: {data['id']}"
             plot_rgbd_silhouette(data['im'], data['depth'], im, rastered_depth, presence_sil_mask, diff_depth_rmse,
-                                 psnr, rmse, fig_title, wandb_run=wandb_run, wandb_step=wandb_step, 
+                                 psnr, rmse, fig_title, wandb_run=wandb_run, wandb_step=wandb_step,
                                  wandb_title=f"{stage} Qual Viz")
 
 
@@ -487,7 +487,7 @@ def eval(dataset, final_params, num_frames, eval_dir, sil_thres, mapping_iters, 
             first_frame_w2c = w2c
         # Setup Camera
         cam = setup_camera(color.shape[2], color.shape[1], intrinsics.cpu().numpy(), w2c.detach().cpu().numpy())
-        
+
         # Define current frame data
         curr_data = {'cam': cam, 'im': color, 'depth': depth, 'id': time_idx, 'intrinsics': intrinsics, 'w2c': w2c}
 
@@ -501,20 +501,20 @@ def eval(dataset, final_params, num_frames, eval_dir, sil_thres, mapping_iters, 
         valid_depth_mask = (curr_data['depth'] > 0)
         silhouette = depth_sil[1, :, :]
         presence_sil_mask = (silhouette > sil_thres)
-        
+
         # Render RGB and Calculate PSNR
         im, radius, _, = Renderer(raster_settings=curr_data['cam'])(**rendervar)
         if mapping_iters==0 and not add_new_gaussians:
             weighted_im = im * presence_sil_mask
             weighted_gt_im = curr_data['im'] * presence_sil_mask
             psnr = calc_psnr(weighted_im, weighted_gt_im).mean()
-            ssim = ms_ssim(weighted_im.unsqueeze(0).cpu(), weighted_gt_im.unsqueeze(0).cpu(), 
+            ssim = ms_ssim(weighted_im.unsqueeze(0).cpu(), weighted_gt_im.unsqueeze(0).cpu(),
                            data_range=1.0, size_average=True)
             lpips_score = loss_fn_alex(torch.clamp(weighted_im.unsqueeze(0), 0.0, 1.0),
                                        torch.clamp(weighted_gt_im.unsqueeze(0), 0.0, 1.0)).item()
         else:
             psnr = calc_psnr(im, curr_data['im']).mean()
-            ssim = ms_ssim(im.unsqueeze(0).cpu(), curr_data['im'].unsqueeze(0).cpu(), 
+            ssim = ms_ssim(im.unsqueeze(0).cpu(), curr_data['im'].unsqueeze(0).cpu(),
                            data_range=1.0, size_average=True)
             lpips_score = loss_fn_alex(torch.clamp(im.unsqueeze(0), 0.0, 1.0),
                                        torch.clamp(curr_data['im'].unsqueeze(0), 0.0, 1.0)).item()
@@ -540,13 +540,13 @@ def eval(dataset, final_params, num_frames, eval_dir, sil_thres, mapping_iters, 
         presence_sil_mask = presence_sil_mask.detach().cpu().numpy()
         if wandb_run is None:
             plot_rgbd_silhouette(color, depth, im, rastered_depth, presence_sil_mask, diff_depth_rmse,
-                                 psnr, rmse, fig_title, plot_dir, 
+                                 psnr, rmse, fig_title, plot_dir,
                                  plot_name=plot_name, save_plot=True)
         elif wandb_save_qual:
             plot_rgbd_silhouette(color, depth, im, rastered_depth, presence_sil_mask, diff_depth_rmse,
-                                 psnr, rmse, fig_title, plot_dir, 
+                                 psnr, rmse, fig_title, plot_dir,
                                  plot_name=plot_name, save_plot=True,
-                                 wandb_run=wandb_run, wandb_step=None, 
+                                 wandb_run=wandb_run, wandb_step=None,
                                  wandb_title="Eval Qual Viz")
 
     # Compute Average Metrics

@@ -28,14 +28,13 @@ from src.utils.config_utils import load_config
 import matplotlib.pyplot as plt
 import cv2
 
-sys.path.append("third_parties/splatam")
 from third_parties.splatam.utils.slam_helpers import (
-transformed_params2rendervar,
- transformed_params2depthplussilhouette,
+    transformed_params2rendervar,
+    transformed_params2depthplussilhouette,
+    matrix_to_quaternion,
 )
 from src.slam.splatam.eval_helper import transform_to_frame
 from src.slam.semsplatam.modified_ver.splatam.splatam import calc_shannon_entropy
-from third_parties.splatam.utils.slam_helpers import matrix_to_quaternion
 
 from src.slam.semsplatam.modified_ver.splatam.splatam import transformed_params2semrendervar_sparse,set_camera_sparse,setup_camera
 from diff_gaussian_rasterization import GaussianRasterizer as Renderer
@@ -778,4 +777,3 @@ if __name__ == "__main__":
     # opacities = save_params['logit_opacities'].detach().cpu().contiguous().numpy()
     # rgbs = save_params['rgb_colors'].detach().cpu().contiguous().numpy()
     # write_ply_file(rgbs, opacities, save_params, ply_savepath)
-

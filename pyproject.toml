@@ -58,17 +58,21 @@ numpy = "*"
 ruff = "*"
 
 [tool.pixi.pypi-options]
-no-build-isolation = ["tinycudann", "diff_gaussian_rasterization"]
+no-build-isolation = ["tinycudann", "diff_gaussian_rasterization", "torch-sparse", "torch-scatter", "channel_rasterization", "sparse_channel_rasterization"]
 
 [tool.pixi.pypi-dependencies]
 tinycudann = {git = "https://github.com/NVlabs/tiny-cuda-nn/", subdirectory = "bindings/torch"}
 diff_gaussian_rasterization = {git = "https://github.com/JonathonLuiten/diff-gaussian-rasterization-w-depth"}
+channel_rasterization = {path = "third_parties/channel_rasterization/channel-rasterization"}
+sparse_channel_rasterization = {path = "third_parties/sparse_channel_rasterization/sparse-channel-rasterization"}
 # splatam = {git = "https://github.com/spla-tam/SplaTAM"}
 attrs = ">=19.1.0"
 gitpython = "*"
 imageio = "*"
 imageio-ffmpeg = "*"
 numpy-quaternion = "*"
+torch-sparse = "*"
+torch-scatter = "*"
 
 [tool.pixi.activation.env]
 HEADLESS = "on"

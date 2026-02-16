@@ -19,16 +19,15 @@ from src.slam.splatam.exploration_map import ExplorationMap
 from third_parties.splatam.utils.slam_external import calc_psnr,calc_ssim
 
 ### original Splatam modules ###
-sys.path.append("third_parties/splatam")
 from third_parties.splatam.scripts.splatam import get_dataset, initialize_camera_pose
-from utils.slam_helpers import (
+from third_parties.splatam.utils.slam_helpers import (
     matrix_to_quaternion, transform_to_frame, transformed_params2rendervar, transformed_params2depthplussilhouette
 )
-from datasets.gradslam_datasets import (load_dataset_config,)
-from utils.keyframe_selection import keyframe_selection_overlap
-from utils.slam_external import calc_ssim, build_rotation, prune_gaussians
-from utils.eval_helpers import report_loss#, report_progress
-from utils.common_utils import save_params
+from third_parties.splatam.datasets.gradslam_datasets import load_dataset_config
+from third_parties.splatam.utils.keyframe_selection import keyframe_selection_overlap
+from third_parties.splatam.utils.slam_external import calc_ssim, build_rotation, prune_gaussians
+from third_parties.splatam.utils.eval_helpers import report_loss  #, report_progress
+from third_parties.splatam.utils.common_utils import save_params
 
 from transformers import AutoProcessor, AutoModelForUniversalSegmentation
 
@@ -59,8 +58,14 @@ class SemSplatam(SplatamOurs):
         ### loading in segmantation network and Langeuage encoder ###
         self.semantic_device = self.slam_cfg['semantic_device']
         self.oneformer_processor = AutoProcessor.from_pretrained(self.slam_cfg['ade20k_checkpoint'])
+        oneformer_use_safetensors = self.slam_cfg.get('oneformer_use_safetensors', True)
+        oneformer_revision = self.slam_cfg.get('oneformer_checkpoint_revision', None)
         self.oneformer_model = AutoModelForUniversalSegmentation.from_pretrained(
-            self.slam_cfg['oneformer_checkpoint'],is_training=False).to(self.semantic_device)
+            self.slam_cfg['oneformer_checkpoint'],
+            is_training=False,
+            use_safetensors=oneformer_use_safetensors,
+            revision=oneformer_revision,
+        ).to(self.semantic_device)
         self.n_cls = self.slam_cfg['num_semantic_classes']
         self.topk = self.slam_cfg['num_topk_logits']
         self.oneformer_processor.image_processor.num_text = self.oneformer_model.config.num_queries - self.oneformer_model.config.text_encoder_n_ctx

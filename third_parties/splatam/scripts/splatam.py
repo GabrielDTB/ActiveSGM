@@ -21,18 +21,18 @@ import torch.nn.functional as F
 from tqdm import tqdm
 import wandb
 
-from third_parties.splatam.datasets.gradslam_datasets import (load_dataset_config, ICLDataset, ReplicaDataset, ReplicaV2Dataset, AzureKinectDataset,
+from ..datasets.gradslam_datasets import (load_dataset_config, ICLDataset, ReplicaDataset, ReplicaV2Dataset, AzureKinectDataset,
                                         ScannetDataset, Ai2thorDataset, Record3DDataset, RealsenseDataset, TUMDataset,
                                         ScannetPPDataset, NeRFCaptureDataset)
-from utils.common_utils import seed_everything, save_params_ckpt, save_params
-from utils.eval_helpers import report_loss, report_progress, eval
-from utils.keyframe_selection import keyframe_selection_overlap
-from utils.recon_helpers import setup_camera
-from utils.slam_helpers import (
+from ..utils.common_utils import seed_everything, save_params_ckpt, save_params
+from ..utils.eval_helpers import report_loss, report_progress, eval
+from ..utils.keyframe_selection import keyframe_selection_overlap
+from ..utils.recon_helpers import setup_camera
+from ..utils.slam_helpers import (
     transformed_params2rendervar, transformed_params2depthplussilhouette,
     transform_to_frame, l1_loss_v1, matrix_to_quaternion
 )
-from utils.slam_external import calc_ssim, build_rotation, prune_gaussians, densify
+from ..utils.slam_external import calc_ssim, build_rotation, prune_gaussians, densify
 
 from diff_gaussian_rasterization import GaussianRasterizer as Renderer
 

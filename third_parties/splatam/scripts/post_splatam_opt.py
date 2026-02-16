@@ -19,14 +19,14 @@ import torch.nn.functional as F
 from tqdm import tqdm
 import wandb
 
-from datasets.gradslam_datasets import (load_dataset_config, ICLDataset, ReplicaDataset, ReplicaV2Dataset, AzureKinectDataset,
-                                        ScannetDataset, Ai2thorDataset, Record3DDataset, RealsenseDataset, TUMDataset,
-                                        ScannetPPDataset, NeRFCaptureDataset)
-from utils.common_utils import seed_everything, save_params
-from utils.recon_helpers import setup_camera
-from utils.gs_helpers import (params2rendervar, params2depthplussilhouette,
-                              report_progress, eval, l1_loss_v1)
-from utils.gs_external import calc_ssim, densify, get_expon_lr_func, update_learning_rate, build_rotation
+from ..datasets.gradslam_datasets import (load_dataset_config, ICLDataset, ReplicaDataset, ReplicaV2Dataset, AzureKinectDataset,
+                                          ScannetDataset, Ai2thorDataset, Record3DDataset, RealsenseDataset, TUMDataset,
+                                          ScannetPPDataset, NeRFCaptureDataset)
+from ..utils.common_utils import seed_everything, save_params
+from ..utils.recon_helpers import setup_camera
+from ..utils.gs_helpers import (params2rendervar, params2depthplussilhouette,
+                                report_progress, eval, l1_loss_v1)
+from ..utils.gs_external import calc_ssim, densify, get_expon_lr_func, update_learning_rate, build_rotation
 
 from diff_gaussian_rasterization import GaussianRasterizer as Renderer
 
@@ -72,7 +72,7 @@ def initialize_first_timestep_from_ckpt(ckpt_path,dataset, num_frames, lrs_dict,
     # Process RGB-D Data
     color = color.permute(2, 0, 1) / 255 # (H, W, C) -> (C, H, W)
     depth = depth.permute(2, 0, 1) # (H, W, C) -> (C, H, W)
-    
+
     # Process Camera Parameters
     intrinsics = intrinsics[:3, :3]
     w2c = torch.linalg.inv(pose)
@@ -132,7 +132,7 @@ def get_loss_gs(params, curr_data, variables, loss_weights):
 
     # RGB Loss
     losses['im'] = 0.8 * l1_loss_v1(im, curr_data['im']) + 0.2 * (1.0 - calc_ssim(im, curr_data['im']))
-    
+
     # Depth Loss
     losses['depth'] = l1_loss_v1(depth, curr_data['depth'])
 
@@ -229,7 +229,7 @@ def rgbd_slam(config: dict):
 
     # Initialize Parameters, Optimizer & Canoncial Camera parameters
     ckpt_path = config["data"]["param_ckpt_path"]
-    params, variables, optimizer, intrinsics, w2c, cam = initialize_first_timestep_from_ckpt(ckpt_path,mapping_dataset, num_frames, 
+    params, variables, optimizer, intrinsics, w2c, cam = initialize_first_timestep_from_ckpt(ckpt_path,mapping_dataset, num_frames,
                                                                                    config['train']['lrs_mapping'],
                                                                                    config['mean_sq_dist_method'])
 
@@ -256,8 +256,8 @@ def rgbd_slam(config: dict):
         depth_all_frames_map.append(depth)
         gt_w2c_all_frames_map.append(gt_w2c)
         # Setup Gaussian Splatting Camera
-        gs_cam = setup_camera(color.shape[2], color.shape[1], 
-                              map_intrinsics.cpu().numpy(), 
+        gs_cam = setup_camera(color.shape[2], color.shape[1],
+                              map_intrinsics.cpu().numpy(),
                               gt_w2c.detach().cpu().numpy())
         gs_cams_all_frames_map.append(gs_cam)
 
@@ -271,7 +271,7 @@ def rgbd_slam(config: dict):
         color = color_all_frames_map[iter_time_idx]
         depth = depth_all_frames_map[iter_time_idx]
         curr_gt_w2c = gt_w2c_all_frames_map[:iter_time_idx+1]
-        curr_data = {'cam': cam, 'im': color, 'depth': depth, 'id': iter_time_idx, 
+        curr_data = {'cam': cam, 'im': color, 'depth': depth, 'id': iter_time_idx,
                      'intrinsics': intrinsics, 'w2c': w2c, 'iter_gt_w2c_list': curr_gt_w2c}
 
         post_num_pts = params['means3D'].shape[0]
@@ -281,11 +281,11 @@ def rgbd_slam(config: dict):
 
         # Reset Optimizer & Learning Rates for Full Map Optimization
         optimizer = initialize_optimizer(params, config['train']['lrs_mapping'])
-        means3D_scheduler = get_expon_lr_func(lr_init=config['train']['lrs_mapping']['means3D'], 
+        means3D_scheduler = get_expon_lr_func(lr_init=config['train']['lrs_mapping']['means3D'],
                                               lr_final=config['train']['lrs_mapping_means3D_final'],
                                               lr_delay_mult=config['train']['lr_delay_mult'],
                                               max_steps=config['train']['num_iters_mapping'])
-        
+
         # Mapping
         if (time_idx + 1) == num_frames:
             if num_iters_mapping > 0:
@@ -302,8 +302,8 @@ def rgbd_slam(config: dict):
                 iter_depth = depth_all_frames_map[iter_time_idx]
                 iter_gt_w2c = gt_w2c_all_frames_map[:iter_time_idx+1]
                 iter_gs_cam = gs_cams_all_frames_map[iter_time_idx]
-                iter_data = {'cam': iter_gs_cam, 'im': iter_color, 'depth': iter_depth, 
-                             'id': iter_time_idx, 'intrinsics': map_intrinsics, 
+                iter_data = {'cam': iter_gs_cam, 'im': iter_color, 'depth': iter_depth,
+                             'id': iter_time_idx, 'intrinsics': map_intrinsics,
                              'w2c': gt_w2c_all_frames_map[iter_time_idx], 'iter_gt_w2c_list': iter_gt_w2c}
                 # Loss for current frame
                 loss, variables, losses = get_loss_gs(params, iter_data, variables, config['train']['loss_weights'])
@@ -321,11 +321,11 @@ def rgbd_slam(config: dict):
                     # Report Progress
                     if config['report_iter_progress']:
                         if config['use_wandb']:
-                            report_progress(params, iter_data, iter+1, progress_bar, iter_time_idx, sil_thres=config['train']['sil_thres'], 
+                            report_progress(params, iter_data, iter+1, progress_bar, iter_time_idx, sil_thres=config['train']['sil_thres'],
                                             wandb_run=wandb_run, wandb_step=wandb_step, wandb_save_qual=config['wandb']['save_qual'],
                                             mapping=True, online_time_idx=time_idx)
                         else:
-                            report_progress(params, iter_data, iter+1, progress_bar, iter_time_idx, sil_thres=config['train']['sil_thres'], 
+                            report_progress(params, iter_data, iter+1, progress_bar, iter_time_idx, sil_thres=config['train']['sil_thres'],
                                             mapping=True, online_time_idx=time_idx)
                     else:
                         progress_bar.update(1)
@@ -376,7 +376,7 @@ def rgbd_slam(config: dict):
     for gt_w2c_tensor in gt_w2c_all_frames_map:
         params['gt_w2c_all_frames'].append(gt_w2c_tensor.detach().cpu().numpy())
     params['gt_w2c_all_frames'] = np.stack(params['gt_w2c_all_frames'], axis=0)
-    
+
     # Save Parameters
     save_params(params, output_dir)
 
@@ -397,7 +397,7 @@ if __name__ == "__main__":
 
     # Set Experiment Seed
     seed_everything(seed=experiment.config['seed'])
-    
+
     # Create Results Directory and Copy Config
     results_dir = os.path.join(
         experiment.config["workdir"], experiment.config["run_name"]

@@ -21,16 +21,15 @@ from src.slam.splatam.exploration_map import ExplorationMap
 from third_parties.splatam.utils.slam_external import calc_psnr
 
 ### original Splatam modules ###
-sys.path.append("third_parties/splatam")
-from scripts.splatam import get_dataset, initialize_camera_pose
-from utils.slam_helpers import (
+from third_parties.splatam.scripts.splatam import get_dataset, initialize_camera_pose
+from third_parties.splatam.utils.slam_helpers import (
     matrix_to_quaternion, transform_to_frame, transformed_params2rendervar, transformed_params2depthplussilhouette
 )
-from datasets.gradslam_datasets import (load_dataset_config,)
-from utils.keyframe_selection import keyframe_selection_overlap
-from utils.slam_external import calc_ssim, build_rotation, prune_gaussians
-from utils.common_utils import save_params, save_params_ckpt
-from utils.recon_helpers import setup_camera
+from third_parties.splatam.datasets.gradslam_datasets import load_dataset_config
+from third_parties.splatam.utils.keyframe_selection import keyframe_selection_overlap
+from third_parties.splatam.utils.slam_external import calc_ssim, build_rotation, prune_gaussians
+from third_parties.splatam.utils.common_utils import save_params, save_params_ckpt
+from third_parties.splatam.utils.recon_helpers import setup_camera
 
 ### original Semantic network modules ###
 from transformers import AutoProcessor, AutoModelForUniversalSegmentation
@@ -163,7 +162,7 @@ class SGSSLAMOurs(SplatamOurs):
         ''' render rgb, mask, and depth based on a given pose
         Args:
             c2w: [4,4]. camera-to-world pose, in SplaTAM system
-        
+
         Returns:
             im: (H,W,3) # render image
             depth: (H,W) # render depth
@@ -195,9 +194,9 @@ class SGSSLAMOurs(SplatamOurs):
 
         # Initialize Render Variables
         rendervar = transformed_params2rendervar(params, transformed_gaussians)
-        depth_sil_rendervar = transformed_params2depthplussilhouette(params, first_frame_w2c, 
+        depth_sil_rendervar = transformed_params2depthplussilhouette(params, first_frame_w2c,
                                                                      transformed_gaussians)
-    
+
         im, _, _, = Renderer(raster_settings=cam)(**rendervar)
         depth_sil, _, _, = Renderer(raster_settings=cam)(**depth_sil_rendervar)
         rastered_depth = depth_sil[0, :, :].unsqueeze(0)
@@ -352,7 +351,7 @@ class SGSSLAMOurs(SplatamOurs):
             c2w             : pose. Format: RUB camera-to-world, [4,4]
             force_map_update: run map update if true
             only_use_global_keyframe: post-refinement stage
-        
+
         Returns:
         '''
         if time_idx==0:
@@ -365,7 +364,7 @@ class SGSSLAMOurs(SplatamOurs):
         if self.slam_cfg.enable_active_planning:
             self.update_explr_map(time_idx, depth, c2w, force_map_update)
 
-    def update_gs_map(self, 
+    def update_gs_map(self,
                       time_idx: int,
                       color   : torch.Tensor,
                       depth   : torch.Tensor,
@@ -436,7 +435,7 @@ class SGSSLAMOurs(SplatamOurs):
                      'semantic_id': seman_id, 'semantic_color': seman_color.to(color.dtype),
                      'id': iter_time_idx, 'intrinsics': intrinsics,
                      'w2c': first_frame_w2c, 'iter_gt_w2c_list': curr_gt_w2c}
-        
+
         # # Initialize Data for Tracking
         if seperate_tracking_res:
             ### Load tracking data ###
@@ -445,7 +444,7 @@ class SGSSLAMOurs(SplatamOurs):
             tracking_depth = F.interpolate(depth.unsqueeze(0), (tracking_h, tracking_w), mode='nearest')[0]
             tracking_seman_id = F.interpolate(seman_id.unsqueeze(0).float(), (tracking_h, tracking_w), mode='nearest')[0].long()
             tracking_seman_color = F.interpolate(seman_color.unsqueeze(0), (tracking_h, tracking_w), mode='bilinear')[0]
-            
+
             tracking_curr_data = {'cam': tracking_cam, 'im': tracking_color, 'depth': tracking_depth,
                                   'semantic_id': tracking_seman_id, 'semantic_color': tracking_seman_color.to(tracking_color.dtype),
                                   'id': iter_time_idx,'intrinsics': tracking_intrinsics, 'w2c': first_frame_w2c, 'iter_gt_w2c_list': curr_gt_w2c}
@@ -454,7 +453,7 @@ class SGSSLAMOurs(SplatamOurs):
 
         # Optimization Iterations
         num_iters_mapping = config['mapping']['num_iters']
-        
+
         # Initialize the camera pose for the current frame
         if time_idx > 0:
             params = initialize_camera_pose(params, time_idx, forward_prop=config['tracking']['forward_prop'])
@@ -572,8 +571,8 @@ class SGSSLAMOurs(SplatamOurs):
         ##################################################
         if self.slam_cfg.use_global_keyframe and not(only_use_global_keyframe):
             self.update_global_keyframe_set_completeness(
-                depth, c2w, 
-                self.slam_cfg.global_keyframe.completeness_thre, 
+                depth, c2w,
+                self.slam_cfg.global_keyframe.completeness_thre,
                 time_idx, curr_gt_w2c, dont_add_kf, num_frames, force_map_update, config
             )
 
@@ -606,7 +605,7 @@ class SGSSLAMOurs(SplatamOurs):
                 if config['use_wandb']:
                     wandb_run.log({"Mapping/Number of Gaussians": post_num_pts,
                                    "Mapping/step": wandb_time_step})
-            
+
             with torch.no_grad():
                 # Get the current estimated rotation & translation
                 curr_cam_rot = F.normalize(params['cam_unnorm_rots'][..., time_idx].detach())
@@ -635,7 +634,7 @@ class SGSSLAMOurs(SplatamOurs):
                     if self.slam_cfg.use_global_keyframe:
                         global_keyframe_time_indices = [frame_idx for frame_idx in self.global_keyframe_time_indices if frame_idx != time_idx]
                         print(f"\nGlobal Keyframes at Frame {time_idx}: {global_keyframe_time_indices}")
-                
+
             # Reset Optimizer & Learning Rates for Full Map Optimization
             optimizer = initialize_optimizer(params, self.params_opt_exclude, config['mapping']['lrs'], tracking=False)
 
@@ -687,7 +686,7 @@ class SGSSLAMOurs(SplatamOurs):
                         iter_seman_color = keyframe_list[selected_rand_keyframe_idx]['semantic_color']
                         iter_seman_id = keyframe_list[selected_rand_keyframe_idx]['semantic_id']
 
-                
+
                 iter_gt_w2c = self.gt_w2c_all_frames[:iter_time_idx+1]
                 iter_data = {'cam': cam, 'im': iter_color, 'depth': iter_depth, 'id': iter_time_idx,
                              'semantic_color': iter_seman_color.to(iter_color.dtype), 'semantic_id': iter_seman_id,
@@ -770,9 +769,9 @@ class SGSSLAMOurs(SplatamOurs):
             quality_method = self.slam_cfg.global_keyframe.get("quality_method", "absolute")
             if quality_method == "absolute":
                 self.update_global_keyframe_set_quality(
-                    color, depth, c2w, 
-                    self.slam_cfg.global_keyframe.color_thre, 
-                    self.slam_cfg.global_keyframe.depth_thre, 
+                    color, depth, c2w,
+                    self.slam_cfg.global_keyframe.color_thre,
+                    self.slam_cfg.global_keyframe.depth_thre,
                     time_idx, curr_gt_w2c, dont_add_kf, num_frames, force_map_update, config
                 )
             elif quality_method == "relative":
@@ -780,7 +779,7 @@ class SGSSLAMOurs(SplatamOurs):
                     self.update_global_keyframe_set_quality_rel()
             else:
                 raise NotImplementedError
-        
+
         # Add frame to keyframe list
         if not(dont_add_kf):
             if ((time_idx == 0) or ((time_idx+1) % config['keyframe_every'] == 0) or \
@@ -799,7 +798,7 @@ class SGSSLAMOurs(SplatamOurs):
                     keyframe_list.append(curr_keyframe)
                     keyframe_time_indices.append(time_idx)
 
-        
+
         # Checkpoint every iteration
         if time_idx % config["checkpoint_interval"] == 0 and config['save_checkpoints']:
             ckpt_output_dir = os.path.join(config["workdir"], config["run_name"])
@@ -807,13 +806,13 @@ class SGSSLAMOurs(SplatamOurs):
             save_semantic_ply(params, ckpt_output_dir, time_idx)
             save_rgb_ply(params, ckpt_output_dir, time_idx)
             np.save(os.path.join(ckpt_output_dir, f"keyframe_time_indices{time_idx}.npy"), np.array(keyframe_time_indices))
-        
+
         # Increment WandB Time Step
         if config['use_wandb']:
             self.wandb_time_step += 1
 
         torch.cuda.empty_cache()
-        
+
         ##################################################
         ### update self variables
         ##################################################
@@ -837,7 +836,7 @@ class SGSSLAMOurs(SplatamOurs):
         if self.seperate_tracking_res:
             self.tracking_cam = tracking_cam
             self.tracking_intrinsics = tracking_intrinsics
-        
+
         self.keyframe_list = keyframe_list
         self.num_frames = num_frames
         self.keyframe_time_indices = keyframe_time_indices
@@ -898,7 +897,7 @@ class SGSSLAMOurs(SplatamOurs):
                         "Final Stats/Average Mapping Iteration Time (ms)": mapping_iter_time_avg*1000,
                         "Final Stats/Average Mapping Frame Time (s)": mapping_frame_time_avg,
                         "Final Stats/step": 1})
-        
+
         # Evaluate Final Parameters
         with torch.no_grad():
             if config['use_wandb']:
@@ -924,7 +923,7 @@ class SGSSLAMOurs(SplatamOurs):
             params['gt_w2c_all_frames'].append(gt_w2c_tensor.detach().cpu().numpy())
         params['gt_w2c_all_frames'] = np.stack(params['gt_w2c_all_frames'], axis=0)
         params['keyframe_time_indices'] = np.array(keyframe_time_indices)
-        
+
         # Save Parameters
         results_dir = os.path.join(self.results_dir, eval_dir_suffix) if eval_dir_suffix else self.results_dir
         save_params(params, results_dir)
@@ -978,5 +977,3 @@ class SGSSLAMOurs(SplatamOurs):
                      add_new_gaussians=config['mapping']['add_new_gaussians'],
                      eval_every=config['eval_every'], ignore_first_frame=ignore_first_frame, save_frames=save_frames)
         return
-
-

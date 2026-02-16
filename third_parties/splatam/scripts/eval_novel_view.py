@@ -20,11 +20,11 @@ import torch
 from tqdm import tqdm
 import wandb
 
-from datasets.gradslam_datasets import (load_dataset_config, ICLDataset, ReplicaDataset, ReplicaV2Dataset, AzureKinectDataset,
-                                        ScannetDataset, Ai2thorDataset, Record3DDataset, RealsenseDataset, TUMDataset,
-                                        ScannetPPDataset, NeRFCaptureDataset)
-from utils.common_utils import seed_everything
-from utils.eval_helpers import eval, eval_nvs
+from ..datasets.gradslam_datasets import (load_dataset_config, ICLDataset, ReplicaDataset, ReplicaV2Dataset, AzureKinectDataset,
+                                          ScannetDataset, Ai2thorDataset, Record3DDataset, RealsenseDataset, TUMDataset,
+                                          ScannetPPDataset, NeRFCaptureDataset)
+from ..utils.common_utils import seed_everything
+from ..utils.eval_helpers import eval, eval_nvs
 
 
 def get_dataset(config_dict, basedir, sequence, **kwargs):
@@ -125,7 +125,7 @@ if __name__=="__main__":
     else:
         eval_dir = os.path.join(results_dir, "eval_nvs")
         wandb_name = config['wandb']['name'] + "_NVS_Split"
-    
+
     # Init WandB
     if config['use_wandb']:
         wandb_time_step = 0
@@ -159,7 +159,7 @@ if __name__=="__main__":
                 eval_nvs(dataset, params, num_frames, eval_dir, sil_thres=config['mapping']['sil_thres'],
                     mapping_iters=config['mapping']['num_iters'], add_new_gaussians=config['mapping']['add_new_gaussians'],
                     eval_every=config['eval_every'], save_frames=True)
-    
+
     # Close WandB
     if config['use_wandb']:
         wandb_run.finish()
