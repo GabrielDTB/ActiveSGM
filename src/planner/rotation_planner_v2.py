@@ -25,6 +25,8 @@ def lerp_quaternions(start_quat, end_quat, max_angle_deg):
 
     # Calculate the minimum steps required
     min_steps = int(np.ceil(total_angle_rad / max_angle_rad))
+    if min_steps < 1:
+        min_steps = 1
 
     quaternions = []
     for i in range(min_steps + 1):
@@ -249,26 +251,26 @@ def poses_to_transformation_matrices(poses: np.ndarray, degrees: bool = True) ->
         np.ndarray: An (N, 4, 4) array of 4x4 transformation matrices.
     """
     n_poses = poses.shape[0]
-    
+
     # Initialize the Nx4x4 transformation matrix array
     transformation_matrices = np.zeros((n_poses, 4, 4))
-    
+
     for i in range(n_poses):
         # Extract position and rotation (Euler angles)
         position = poses[i, :3]  # [x, y, z]
         euler_angles = poses[i, 3:]  # [roll, pitch, yaw]
-        
+
         # Create rotation matrix from Euler angles
         rotation_matrix = R.from_euler('xyz', euler_angles, degrees=degrees).as_matrix()
-        
+
         # Construct the 4x4 transformation matrix
         transformation_matrix = np.eye(4)
         transformation_matrix[:3, :3] = rotation_matrix
         transformation_matrix[:3, 3] = position
-        
+
         # Assign to the output array
         transformation_matrices[i] = transformation_matrix
-    
+
     return transformation_matrices
 
 def smoothen_trajectory_v2(start_pose, end_pose, positions, max_angle_deg=10, gravity_vector=[0, 0, -1]):

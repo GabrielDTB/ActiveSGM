@@ -1,0 +1,415 @@
+import argparse
+import numpy as np
+import open3d as o3d
+import multiprocessing as mp
+import h5py
+import os
+import torch
+
+from concurrent.futures import ProcessPoolExecutor
+from pathlib import Path
+from plyfile import PlyData
+from sklearn.neighbors import KDTree
+from tqdm import tqdm
+
+################################################################################
+# I/O Utilities
+################################################################################
+
+
+class IO:
+    @classmethod
+    def get(cls, file_path):
+        _, file_extension = os.path.splitext(file_path)
+
+        if file_extension in [".npy"]:
+            return cls._read_npy(file_path)
+        elif file_extension in [".h5"]:
+            return cls._read_h5(file_path)
+        elif file_extension in [".txt"]:
+            return cls._read_txt(file_path)
+        elif file_extension in [".ply"]:
+            return cls._read_ply(file_path)
+        else:
+            raise Exception("Unsupported file extension: %s" % file_extension)
+
+    @classmethod
+    def _read_npy(cls, file_path):
+        return np.load(file_path)
+
+    @classmethod
+    def _read_txt(cls, file_path):
+        return np.loadtxt(file_path)
+
+    @classmethod
+    def _read_h5(cls, file_path):
+        f = h5py.File(file_path, "r")
+        return f["data"][()]
+
+    @classmethod
+    def _read_ply(cls, file_path):
+        return PlyData.read(file_path)
+
+
+################################################################################
+# Gaussian Reading
+################################################################################
+
+
+def np_sigmoid(x):
+    return 1 / (1 + np.exp(-x))
+
+
+def read_gaussian_attribute(
+    vertex, attribute=["coord", "opacity", "scale", "quat", "color"]
+):
+    """
+    Reads a 'vertex' structure from a PlyData file and returns a dictionary
+    with 'coord', 'opacity', 'scale', 'quat', 'color' (all optional).
+    """
+    data = {}
+
+    # Coordinates (xyz)
+    x = vertex["x"].astype(np.float32)
+    y = vertex["y"].astype(np.float32)
+    z = vertex["z"].astype(np.float32)
+    data["coord"] = np.stack((x, y, z), axis=-1)  # [N, 3]
+
+    # Opacity
+    if "opacity" in attribute:
+        opacity = vertex["opacity"].astype(np.float32)
+        opacity = np_sigmoid(opacity)  # range (0,1)
+        data["opacity"] = opacity
+
+    # Scale & Quaternion
+    if "scale" in attribute and ("quat" in attribute or "euler" in attribute):
+        scale_names = [p.name for p in vertex.properties if p.name.startswith("scale_")]
+        scale_names = sorted(scale_names, key=lambda x: int(x.split("_")[-1]))
+        scales = np.zeros((data["coord"].shape[0], len(scale_names)), dtype=np.float32)
+        for idx, attr_name in enumerate(scale_names):
+            scales[:, idx] = vertex[attr_name].astype(np.float32)
+        scales = np.exp(scales)  # exponentiate to get actual scale
+        data["scale"] = scales
+
+        rot_names = [p.name for p in vertex.properties if p.name.startswith("rot")]
+        rot_names = sorted(rot_names, key=lambda x: int(x.split("_")[-1]))
+        rots = np.zeros((data["coord"].shape[0], len(rot_names)), dtype=np.float32)
+        for idx, attr_name in enumerate(rot_names):
+            rots[:, idx] = vertex[attr_name].astype(np.float32)
+
+        # Normalize the quaternion
+        rots = rots / (np.linalg.norm(rots, axis=1, keepdims=True) + 1e-9)
+        # Enforce positive real part
+        signs_vector = np.sign(rots[:, 0])
+        rots = rots * signs_vector[:, None]
+        data["quat"] = rots
+
+    # Color (from spherical harmonics DC term) or direct color
+    if "sh" in attribute or "color" in attribute:
+        # DC terms
+        features_dc = np.zeros((data["coord"].shape[0], 3, 1), dtype=np.float32)
+        features_dc[:, 0, 0] = vertex["f_dc_0"].astype(np.float32)
+        features_dc[:, 1, 0] = vertex["f_dc_1"].astype(np.float32)
+        features_dc[:, 2, 0] = vertex["f_dc_2"].astype(np.float32)
+
+        feature_pc = features_dc.reshape(-1, 3)
+        # Move from SH DC to approximate color
+        C0 = 0.28209479177387814  # Spherical Harmonics Y00
+        feature_pc = (feature_pc * C0).astype(np.float32) + 0.5
+        feature_pc = np.clip(feature_pc, 0, 1)
+        # Store 0-255
+        data["color"] = (feature_pc * 255).astype(np.uint8)
+
+    return data
+
+
+################################################################################
+# Utility: find folder that ends with a certain suffix
+################################################################################
+
+
+def find_folder_with_suffix(root_dir, suffix):
+    """
+    Return the first folder under `root_dir` whose name ends with `suffix`.
+    """
+    root = Path(root_dir)
+    matching_folders = [
+        folder
+        for folder in root.rglob("*")
+        if folder.is_dir() and folder.name.endswith(suffix)
+    ]
+    if len(matching_folders) == 0:
+        raise FileNotFoundError(f"No folder with suffix {suffix} found in {root_dir}")
+    return matching_folders
+
+
+################################################################################
+# Main Parsing Logic
+################################################################################
+
+
+def parse_scene(
+    scene_name,
+    split,
+    gs_root,
+    pc_root,
+    output_root,
+    feat_root=None,
+    skip_feat=True,
+    remove_feat=False,
+    debug=False,
+):
+    """
+    scene_name: e.g., '17DRP5sb8fy_00'
+    split: 'train', 'val', or 'test'
+    gs_root: Path to 3D Gaussians. Scenes are all in a single folder structure.
+    pc_root: Path to point cloud subfolders, each subfolder has coord.npy, segment.npy, etc.
+    output_root: Where we save the per-scene Gaussian data
+    debug: If True, skip actually writing data
+    """
+    if debug:
+        print("===================")
+        print("DEBUG MODE, TURN OFF TO SAVE DATA")
+
+    print(f"Parsing scene {scene_name} in {split} split")
+
+    # 1) Find the folder in gs_root that ends with scene_name
+    scene_path = gs_root / scene_name
+    gs_path = scene_path / "ckpts" / "point_cloud_9000.ply"
+    feat_path = feat_root / scene_name / "langfeat.pth" if feat_root else None
+
+    if not feat_path.exists():
+        print(f"Feature path not found for scene {scene_name}. Skipping...")
+        return  # skip this scene
+    # 2) Load the GS file
+    try:
+        gs = IO.get(gs_path)
+    except Exception as e:
+        print(f"Error loading {gs_path}: {e}")
+        return  # skip this scene
+
+    # 3) Parse the Gaussians
+    vertex = gs["vertex"]
+    gs_data = read_gaussian_attribute(
+        vertex, attribute=["coord", "opacity", "scale", "quat", "color"]
+    )
+
+    coord = gs_data["coord"]
+    color = gs_data["color"]
+    opacity = gs_data["opacity"]
+    scale = gs_data["scale"]
+    quat = gs_data["quat"]
+
+    # 4) Load the PC from pc_root for nearest neighbor labeling
+    #    We'll look for pc_root/ split / scene_name
+    scene_pc_dir = Path(pc_root) / split / scene_name
+    pc_coord_path = scene_pc_dir / "coord.npy"
+    pc_segment_path = scene_pc_dir / "segment.npy"
+    pc_normal_path = scene_pc_dir / "normal.npy"
+
+    if not pc_coord_path.exists() or not pc_segment_path.exists():
+        print(
+            f"Point cloud or segment file not found for scene {scene_name}. Skipping."
+        )
+        return
+
+    gs_feat_np = None
+    if feat_path and not skip_feat:
+        gs_feat, _ = torch.load(feat_path, map_location="cpu")
+        gs_feat_np = gs_feat.to(torch.float16).numpy()
+        # check if the feature is all zero, save as int
+        valid_feat_mask = np.any(gs_feat_np != 0.0, axis=1).astype(int)
+        assert len(coord) == len(gs_feat_np), (
+            f"coord and gs_feat_np not match {len(coord)} and {len(gs_feat_np)} in {scene_name}"
+        )
+
+    pc_coord = np.load(pc_coord_path)  # (N, 3)
+    pc_segment = np.load(pc_segment_path)  # (N,) or (N,1)
+    pc_normal = np.load(pc_normal_path) if pc_normal_path.exists() else None  # (N, 3)
+    # handle shape
+    if pc_segment.ndim == 2 and pc_segment.shape[1] == 1:
+        pc_segment = pc_segment.squeeze(1)
+
+    # 5) Optional bounding-box-based pruning
+    pc_o3d = o3d.geometry.PointCloud()
+    pc_o3d.points = o3d.utility.Vector3dVector(pc_coord)
+    oriented_bbox = pc_o3d.get_minimal_oriented_bounding_box()
+    enlargement = 0.25  # in meters
+    new_extent = np.asarray(oriented_bbox.extent) + 2 * enlargement
+    oriented_bbox.extent = new_extent
+
+    gs_o3d = o3d.geometry.PointCloud()
+    gs_o3d.points = o3d.utility.Vector3dVector(coord)
+
+    within_mask = oriented_bbox.get_point_indices_within_bounding_box(gs_o3d.points)
+    print(f"Pruned {len(coord) - len(within_mask)} gaussians by bounding box.")
+
+    # Disable bbox pruning as matterport3d we use our own fused point cloud
+    within_mask = np.ones(len(coord), dtype=bool)
+    coord = coord[within_mask]
+    color = color[within_mask]
+    opacity = opacity[within_mask]
+    scale = scale[within_mask]
+    quat = quat[within_mask]
+
+    # 6) Nearest Neighbor from point clouds to get the semantic label, and normal for each Gaussian
+    tree = KDTree(pc_coord)
+    _, indices = tree.query(coord, k=1)
+    gs_segment = pc_segment[indices[:, 0]]
+
+    gs_nomral = None
+    if pc_normal is not None:
+        gs_normal = pc_normal[indices[:, 0]]
+
+    # 7) Save results
+    save_path = Path(output_root) / split / scene_name
+    save_path.mkdir(parents=True, exist_ok=True)
+
+    if not skip_feat and gs_feat_np is not None:
+        gs_feat_np = gs_feat_np[within_mask]
+        valid_feat_mask = valid_feat_mask[within_mask]
+        np.save(save_path / "valid_feat_mask.npy", valid_feat_mask)
+        np.save(save_path / "lang_feat.npy", gs_feat_np)
+
+    if not debug:
+        np.save(save_path / "coord.npy", coord)
+        np.save(save_path / "color.npy", color)
+        np.save(save_path / "opacity.npy", opacity)
+        np.save(save_path / "scale.npy", scale)
+        np.save(save_path / "quat.npy", quat)
+        # Save nearest-neighbor semantic data
+        np.save(save_path / "segment.npy", gs_segment)
+        if gs_normal is not None:
+            np.save(save_path / "normal.npy", gs_normal)
+    else:
+        print("Debug mode: not saving data for scene:", scene_name)
+
+    if remove_feat:
+        # Remove the feature file if it exists
+        if feat_path and feat_path.exists():
+            os.remove(feat_path)
+            print(f"Removed feature file: {feat_path}")
+
+    print(f"Scene {scene_name} processed successfully!")
+
+
+################################################################################
+# Main script
+################################################################################
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--gs_root", required=True, help="Path to the Gaussian dataset."
+    )
+    parser.add_argument(
+        "--pc_root",
+        required=True,
+        help="Path to the preprocessed point cloud dataset.",
+    )
+    parser.add_argument(
+        "--feat_root",
+        help="Path to language features.",
+    )
+    parser.add_argument(
+        "--output_root",
+        required=True,
+        help="Output path where train/val/test folders will be located.",
+    )
+    parser.add_argument(
+        "--num_workers",
+        default=mp.cpu_count(),
+        type=int,
+        help="Num workers for preprocessing.",
+    )
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="If set, will not save data. For debugging.",
+    )
+    parser.add_argument("--split_folder", type=Path, help="Path to the split folder.")
+    parser.add_argument(
+        "--skip_feat", action="store_true", help="Skip feature processing."
+    )
+    parser.add_argument(
+        "--remove_feat", action="store_true", help="Skip feature processing."
+    )
+    config = parser.parse_args()
+
+    config.gs_root = Path(config.gs_root)
+    config.pc_root = Path(config.pc_root)
+    config.feat_root = Path(config.feat_root) if config.feat_root else None
+    config.output_root = Path(config.output_root)
+
+    # Collect the scenes from train/val/test subfolders in pc_root
+    def get_scenes_from_split(split_name):
+        split_file = config.split_folder / f"{split_name}.txt"
+        if split_file.exists():
+            with open(split_file, "r") as f:
+                return [line.strip() for line in f.readlines()]
+        else:
+            raise FileNotFoundError(
+                f"Split file {split_file} not found at {config.split_folder}"
+            )
+
+    train_scenes = get_scenes_from_split("train_missing")
+    val_scenes = get_scenes_from_split("val")
+    test_scenes = get_scenes_from_split("test")
+
+    # we have to filter scenes that does not exsit in gs_root
+    train_scenes = [
+        scene for scene in train_scenes if (config.gs_root / scene).exists()
+    ]
+    val_scenes = [scene for scene in val_scenes if (config.gs_root / scene).exists()]
+    test_scenes = [scene for scene in test_scenes if (config.gs_root / scene).exists()]
+    data_list = train_scenes + val_scenes + test_scenes
+
+    print("Num train scenes:", len(train_scenes))
+    print("Num val scenes:", len(val_scenes))
+    print("Num test scenes:", len(test_scenes))
+    print("Total scenes:", len(data_list))
+
+    # combine all scenes
+    split_list = (
+        ["train"] * len(train_scenes)
+        + ["val"] * len(val_scenes)
+        + ["test"] * len(test_scenes)
+    )
+
+    # Parallel processing
+    parallel = True
+    if parallel:
+        pool = ProcessPoolExecutor(max_workers=config.num_workers)
+        futures = []
+        for scene_name, split_name in zip(data_list, split_list):
+            futures.append(
+                pool.submit(
+                    parse_scene,
+                    scene_name,
+                    split_name,
+                    config.gs_root,
+                    config.pc_root,
+                    config.output_root,
+                    config.feat_root,
+                    config.skip_feat,
+                    config.remove_feat,
+                    config.debug,
+                )
+            )
+        _ = [f.result() for f in futures]
+        pool.shutdown()
+    else:
+        for scene_name, split_name in tqdm(zip(data_list, split_list)):
+            parse_scene(
+                scene_name,
+                split_name,
+                config.gs_root,
+                config.pc_root,
+                config.output_root,
+                config.feat_root,
+                config.skip_feat,
+                config.remove_feat,
+                config.debug,
+            )
+
+    print("Done preprocessing HoliCity Gaussian data!")

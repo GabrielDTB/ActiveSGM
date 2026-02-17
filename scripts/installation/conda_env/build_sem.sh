@@ -13,7 +13,7 @@ conda activate activegamer
 # ### Setup habitat-sim ###
 cd ${ROOT}/third_parties
 if [ ! -d habitat_sim ]; then
-    git clone git@github.com:Huangying-Zhan/habitat-sim.git habitat_sim
+    git clone https://github.com/Huangying-Zhan/habitat-sim.git habitat_sim
 fi
 cd habitat_sim
 pip install -r requirements.txt

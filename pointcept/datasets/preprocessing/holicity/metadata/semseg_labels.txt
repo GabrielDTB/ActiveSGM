@@ -1,0 +1,4 @@
+buildings
+roads
+terrains
+trees
