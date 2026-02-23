@@ -37,7 +37,7 @@ def setup_camera(w, h, k, w2c, near=0.01, far=100, num_channels=102):
         image_width=w,
         tanfovx=w / (2 * fx),
         tanfovy=h / (2 * fy),
-        bg=torch.tensor([0, 0, 0], dtype=torch.float32, device="cuda"),
+        bg=torch.zeros(num_channels, dtype=torch.float32, device="cuda"),
         scale_modifier=1.0,
         viewmatrix=w2c,
         projmatrix=full_proj,
@@ -424,8 +424,8 @@ def calc_hellinger_distance(pred_dist,target_dist,eps=1e-8):
 
     pred_dist = pred_dist.reshape(-1,h*w).permute(1,0)
     target_dist = target_dist.reshape(-1,h*w).permute(1,0)
-    pred_dist = torch.clamp(pred_dist,min=0.)
-    target_dist = torch.clamp(target_dist, min=0)
+    pred_dist = torch.clamp(pred_dist,min=eps)
+    target_dist = torch.clamp(target_dist, min=eps)
     sqrt_pred = torch.sqrt(pred_dist)
     sqrt_target = torch.sqrt(target_dist)
     dist = torch.sqrt(0.5 * torch.sum((sqrt_pred- sqrt_target) ** 2, dim=-1))
@@ -731,5 +731,3 @@ def densify(params, variables, optimizer, iter, densify_dict):
             params = update_params_and_optimizer(new_params, params, optimizer)
 
     return params, variables
-
-
