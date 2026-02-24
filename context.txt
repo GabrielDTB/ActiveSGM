@@ -1,41 +1,33 @@
-# SceneSplat SLAM Integration - Research Context
-# Generated as a reference for implementing src/slam/scenesplat/scenesplat.py
+# SceneSplat SLAM Integration — Implementation Reference
+# This file documents the complete SceneSplat integration into ActiveSGM.
+# Use this as the sole reference when modifying the implementation.
 
 ================================================================================
-GOAL
-================================================================================
-Create a new SLAM method `scenesplat` (at src/slam/scenesplat/) modeled after
-`semsplatam`, but replacing the OneFormer 2D image segmentation model with
-SceneSplat — a 3D Point Transformer V3 (PTv3) model that operates directly on
-Gaussian splat point clouds to produce per-Gaussian language/semantic features.
-
-================================================================================
-PROJECT STRUCTURE & ENTRY POINTS
+OVERVIEW
 ================================================================================
 
-Run command:
-  pixi run bash scripts/activesgm/run_replica.sh office0 1 ActiveSem 0 0,1
+SceneSplat replaces OneFormer 2D image segmentation (used in SemSplatam) with a
+3D Point Transformer V3 (PTv3) model that operates directly on the Gaussian splat
+point cloud. Instead of running a 2D segmentor per-frame, SceneSplat runs on the
+full Gaussian map after each mapping step, producing per-Gaussian 16-dim semantic
+features via an autoencoder (768 → 16 dim compression).
 
-Main entry:
-  src/main/activesgm.py  (inferred)
+Key differences from SemSplatam:
+- No per-frame semantic annotation (no OneFormer)
+- No semantic loss during tracking/mapping (features are directly assigned)
+- Features are 16-dim autoencoder latent (not 102-class logits)
+- SceneSplat runs after mapping steps, not per-frame
+- ~15x faster than SemSplatam due to no per-frame model + no semantic loss
 
-SLAM method dispatch:
-  src/slam/__init__.py :: init_SLAM_model()
-  - Reads main_cfg.slam.method
-  - "scenesplat" case needs to be added here, importing SceneSplatam from
-    src/slam/scenesplat/scenesplat.py
+================================================================================
+HOW TO RUN
+================================================================================
 
-Config loaded per scene:
-  configs/Replica/{scene}/ActiveSem.py  (for semsplatam)
-  -> a new configs/Replica/{scene}/ActiveSceneSplat.py will be needed
+  pixi run bash scripts/activesgm/run_replica.sh office0 1 ActiveSceneSplat 0 0,1
 
-The slam config sets slam.method = "semsplatam" and provides keys like:
-  num_topk_logits, num_semantic_classes, lambda_hel, lambda_cosine,
-  uncert_mask_thres, semantic_device, oneformer_checkpoint, etc.
-
-SplaTAM room-level config (geometry/tracking/mapping parameters):
-  configs/Replica/replica_splatam_s.py
-  -> can be reused as-is for scenesplat
+Config: configs/Replica/office0/ActiveSceneSplat.py
+  - slam.method = "scenesplat"
+  - Uses same room_cfg (replica_splatam_s.py) as semsplatam
 
 ================================================================================
 CLASS HIERARCHY
@@ -43,301 +35,446 @@ CLASS HIERARCHY
 
 SlamModel                          (src/slam/slam_model.py)
   └── SplatamOurs                  (src/slam/splatam/splatam.py)
-        └── SemSplatam             (src/slam/semsplatam/semsplatam.py)
-              └── SceneSplatam     (src/slam/scenesplat/scenesplat.py)  [TO CREATE]
+        ├── SemSplatam             (src/slam/semsplatam/semsplatam.py)
+        └── SceneSplatam           (src/slam/scenesplat/scenesplat.py)
 
-SplatamOurs handles:
-  - Config loading, WandB, device setup
-  - Dataset loading (load_splatam_dataset_config)
-  - Keyframe management
-  - Checkpoint save/load
-  - Gaussian map update (update_gs_map) — the core SLAM loop
-  - Rendering (render, plot_render_*)
-  - Evaluation (eval_result, print_and_save_result)
-  - override_config, update_dict_recursive
-
-SemSplatam adds on top:
-  - OneFormer model loading in __init__
-  - load_eval_dataset_with_semantic (loads dataset with semantic GT for eval)
-  - semantic_annotation(image) -> (class_ids [H,W], logits [H,W,num_classes])
-  - init_camera_parameters (overrides parent; passes semantic to initialize_first_timestep)
-  - render_semantic(c2w, seen) -> (class_id [H,W], logits [C,H,W])
-  - update_global_keyframe_set_quality_rel (uses semantic_annotation on keyframes)
-  - online_recon_step (calls semantic_annotation per frame, then update_gs_map)
-  - eval_semantic_result, eval_semantic_result_mp3d
-  - load_params_by_step (semantic-aware checkpoint loading)
+SceneSplatam extends SplatamOurs directly (NOT SemSplatam) to avoid pulling in
+OneFormer/transformers dependencies. It reuses semantic rendering infrastructure
+(sparse_channel_rasterization) but has no semantic loss.
 
 ================================================================================
-SEMSPLATAM SEMANTIC PIPELINE (ONEFORMER)
+FILE STRUCTURE
 ================================================================================
 
-1. Per incoming frame:
-   semantic_annotation(image: Tensor[H,W,3])
-     -> input_img converted to PIL Image
-     -> oneformer_segmentation(image, processor, model, device, num_classes=102)
-     -> returns (class_ids[H,W], logits[H,W,102])
+src/slam/scenesplat/
+  __init__.py                              -- empty
+  scenesplat.py                            -- main SceneSplatam class
+  scenesplat_model.py                      -- PTv3 + Autoencoder loader & inference
+  modified_ver/
+    __init__.py                            -- empty
+    splatam/
+      __init__.py                          -- empty
+      splatam.py                           -- adapted helper functions
 
-2. logits (H,W,102) are used as `seman` in:
-   a. initialize_first_timestep(dataset, seman, ...) — init first Gaussians
-   b. add_new_gaussians_with_seman(params, variables, curr_data, ...) — add new Gaussians
-   c. get_loss_with_seman(params, iter_data, ...) — semantic supervision loss during mapping
-   d. Stored alongside keyframes for re-annotation during mapping iterations
+configs/Replica/office0/ActiveSceneSplat.py -- config
 
-3. Gaussian semantic representation:
-   - params['semantic_logits']: [N, TOPK] sparse values (top-k of 102-class logit)
-   - variables['seman_cls_ids']: [N, TOPK] column indices (which classes)
-   - TOPK = 16 (num_topk_logits in config)
-   - num_semantic_classes = 102 (Replica: ADE20K-based OneFormer classes)
-
-4. Semantic rendering:
-   - Uses sparse_channel_rasterization (SEMRenderer_sparse)
-   - transformed_params2semrendervar_sparse constructs rendervar from sparse logits
-   - set_camera_sparse constructs a Camera_sparse with cls_ids
-
-5. Semantic loss (get_loss_with_seman):
-   - Compares rendered logits vs GT logits from oneformer
-   - Uses combination of: cosine similarity, Hellinger distance, KL divergence
-   - Weights: lambda_hel, lambda_cosine
+src/slam/__init__.py                       -- dispatch (scenesplat case added)
 
 ================================================================================
-SCENESPLAT MODEL
+SCENESPLAT.PY — MAIN CLASS (SceneSplatam)
 ================================================================================
 
-Checkpoint: /mnt/Data4/scene_splat_7k/checkpoints/
-            lang-pretrain-concat-scan-ppv2-matt-mcmc-wo-normal-contrastive.pth
+File: src/slam/scenesplat/scenesplat.py
+Class: SceneSplatam(SplatamOurs)
 
-Checkpoint structure:
-  keys: ['epoch', 'state_dict', 'optimizer', 'scheduler', 'scaler', 'best_metric_value']
-  state_dict keys: prefixed with 'module.backbone.*'
-  Architecture: Point Transformer V3 (PT-v3m1) backbone (encoder-decoder)
+Imports from different eval_helper than SemSplatam:
+  - Uses: src/slam/splatam/eval_helper.py (base)
+  - NOT:  src/slam/semsplatam/modified_ver/splatam/eval_helper.py
 
-Model config (from concat_dataset config):
-  type: "LangPretrainer"
-  backbone:
-    type: "PT-v3m1"
-    in_channels: 11   # color(3) + quaternion(4) + scale(3) + opacity(1), NO normals
-    order: ("z", "z-trans", "hilbert", "hilbert-trans")
-    stride: (2, 2, 2)
-    enc_depths: (2, 2, 2, 6)
-    enc_channels: (32, 64, 128, 256)
-    enc_num_head: (2, 4, 8, 16)
-    enc_patch_size: (1024, 1024, 1024, 1024)
-    dec_depths: (2, 2, 2)
-    dec_channels: (768, 512, 256)   # output feature dim = 768 (from dec0)
-    dec_num_head: (16, 16, 16)
-    dec_patch_size: (1024, 1024, 1024)
-    mlp_ratio: 4
-    enable_flash: True
-    ...
+  CRITICAL: Function signatures differ between these two eval_helpers:
+    BASE (what we use):
+      report_progress(params, data, i, progress_bar, iter_time_idx, sil_thres, ...)
+      eval(dataset, final_params, num_frames, eval_dir, sil_thres, ...)
+      save_params_ckpt(output_params, output_dir, time_idx)
+    SEMSPLATAM (NOT used):
+      report_progress(slam_model, params, variables, data, i, progress_bar, ...)
+      eval(slam_model, dataset, params, variables, num_frames, ...)
+      save_params_ckpt(output_params, output_variables, output_dir, time_idx)
 
-Input format (a `Point` dict from pointcept):
-  - "coord":      [N, 3]  xyz positions of Gaussians
-  - "feat":       [N, 11] concatenation of color(3) + opacity(1) + quat(4) + scale(3)
-  - "grid_coord": [N, 3]  integer grid coords (from GridSample at grid_size=0.02m)
-  - "offset":     [B]     batch offsets (or "batch": [N] batch indices)
+  DO NOT add `self`, `variables`, or extra args to these calls.
 
-  feat_keys = ("color", "opacity", "quat", "scale")
-  NormalizeColor is applied to color (divide by 255, subtract mean)
-  opacity: sigmoid(raw_logit_opacity) -> (0,1)
-  scale:   exp(log_scale) -> actual scale
-  quat:    normalized, positive real part enforced
+Key methods:
 
-Output:
-  - Per-point feature vectors of dim 768 (from the first decoder level, dec_channels[0])
-  - Accessed via Point["feat"] after backbone forward pass
+  __init__(main_cfg, info_printer, logger):
+    - Calls SplatamOurs.__init__
+    - Loads PTv3 backbone via load_scenesplat_backbone()
+    - Loads Autoencoder via load_autoencoder()
+    - Sets self.n_cls=16, self.topk=16, self.scenesplat_grid_size=0.02
 
-Source location: /mnt/Data2/liyan/SceneSplat/pointcept/
+  run_scenesplat_on_map():
+    - @torch.no_grad()
+    - Runs run_scenesplat(backbone, autoencoder, params, grid_size, device)
+    - Overwrites params['semantic_logits'] with torch.nn.Parameter(feat_16)
+    - Sets variables['seman_cls_ids'] = arange(16).expand(N, 16) (identity)
 
-Key classes:
-  pointcept.models.point_transformer_v3.point_transformer_v3m1_base
-    - PTv3 backbone
-    - forward(data_dict) takes a dict with coord, feat, offset/batch, grid_coord
-  pointcept.models.utils.structure.Point
-    - Dict subclass that holds point cloud data
-    - Point.serialization(...) for space-filling curve ordering
-    - Point.sparsify(...) for spconv SparseConvTensor
+  init_camera_parameters():
+    - Calls initialize_first_timestep() (no seman arg)
+    - Then run_scenesplat_on_map() on initial Gaussians
 
-To use just the backbone (not the full LangPretrainer wrapper):
-  - Strip 'module.' prefix from state_dict keys when loading
-  - Load only backbone weights (strip 'backbone.' prefix as well, or load backbone directly)
-  - Call backbone.forward(data_dict) where data_dict has coord, feat, offset, grid_coord
+  online_recon_step(time_idx, color, depth, c2w, ...):
+    - NO per-frame semantic annotation
+    - Calls update_gs_map() then update_explr_map()
 
-================================================================================
-AUTOENCODER
-================================================================================
+  update_gs_map(time_idx, color, depth, c2w, ...):
+    - Tracking: uses get_loss() (base, geometry-only: RGB + depth)
+    - Mapping: uses get_loss() (base, geometry-only)
+    - Densification: add_new_gaussians_with_seman() — new Gaussians get zero semantics
+    - Pruning: prune_gaussians_w_semantic() — maintains semantic_logits consistency
+    - After mapping loop: run_scenesplat_on_map() enriches ALL Gaussians
 
-Checkpoint: /mnt/Data2/liyan/SceneSplat/autoencoder/ckpt/matterport/best_ckpt.pth
+  render(c2w) -> (im, depth, valid_mask, seen):
+    - Standard RGB+depth rendering via diff_gaussian_rasterization
 
-Source: /mnt/Data2/liyan/SceneSplat/autoencoder/model.py
+  render_semantic(c2w, seen) -> (class_id, logits):
+    - Renders 16-dim features via sparse_channel_rasterization
+    - class_id = logits.argmax(dim=0)
 
-Architecture (Autoencoder class):
-  in_feature_dim = 768
-  encoder_hidden_dims = [512, 256, 128, 64, 32, 16]
-  decoder_hidden_dims = [32, 64, 128, 256, 256, 512]
+  print_and_save_result():
+    - Uses base eval() for RGB-only evaluation (no semantic eval)
+    - Saves params including seman_cls_ids
 
-  Encoder: Linear(768->512), BN+ReLU+Linear(512->256), ..., Linear(32->16)
-           Then L2-normalize -> 16-dim latent
-  Decoder: Linear(16->32), ReLU+Linear(32->64), ..., Linear(512->768)
-           Then L2-normalize
+  load_params_by_step(step, stage):
+    - Loads checkpoint, pops seman_cls_ids into variables
 
-  encode(x) -> 16-dim normalized feature
-  decode(x) -> 768-dim normalized reconstruction
-  forward(x) -> encode then decode (for reconstruction)
+Star import: `from src.slam.splatam.modified_ver.scripts.splatam import *`
+  - Provides get_loss used in tracking/mapping
+  - This shadows the get_loss from third_parties.splatam.scripts.splatam
+    (harmless — same function forwarded)
 
-Checkpoint is a plain state_dict (OrderedDict), loaded directly:
-  model.load_state_dict(checkpoint)
-
-For our use: only need model.encode(feat_768) -> feat_16
+get_loss signature (from star import):
+  get_loss(params, curr_data, variables, iter_time_idx, loss_weights,
+           use_sil_for_loss, sil_thres, use_l1, ignore_outlier_depth_loss,
+           tracking=False, mapping=False, ...)
 
 ================================================================================
-INTENDED SCENESPLAT PIPELINE
+SCENESPLAT_MODEL.PY — PTv3 + AUTOENCODER
 ================================================================================
 
-Key design decision: SceneSplat operates on Gaussian splat attributes, not raw
-RGB-D images. Therefore, it naturally fits a **per-map** update pattern:
+File: src/slam/scenesplat/scenesplat_model.py
 
-  1. SplaTAM runs tracking + mapping as normal (geometry only, or with dummy semantics)
-  2. After each mapping step (or every N steps), SceneSplat is run on the
-     current Gaussian map to produce per-Gaussian 768-dim features
-  3. Autoencoder compresses 768 -> 16 dim
-  4. These 16-dim features are stored as params['semantic_logits']
+Contains: Autoencoder class, load_scenesplat_backbone(), load_autoencoder(),
+          _voxel_downsample(), prepare_gaussian_input(), run_scenesplat()
 
-This avoids the need for per-frame semantic annotation entirely. There is no
-need for projected 2D semantic maps as supervision targets.
+Autoencoder:
+  - Copied from /mnt/Data2/liyan/SceneSplat/autoencoder/model.py
+  - Only encoder is used (encode: 768 → 16, L2-normalized)
+  - encoder_hidden_dims = [512, 256, 128, 64, 32, 16]
+  - decoder_hidden_dims = [32, 64, 128, 256, 256, 512]
+  - Checkpoint: plain state_dict, loaded directly with load_state_dict()
 
-Gaussian input preparation (from SplaTAM params):
-  coord  = params['means3D']                           [N, 3]
-  color  = sigmoid(params['rgb_colors']) * 255        [N, 3]  (uint8 in train, float here)
-  quat   = normalize(params['cam_unnorm_rots'...])    [N, 4]  (each Gaussian's rotation)
-           NOTE: params['unnorm_rotations'] for per-Gaussian rotations
-  scale  = exp(params['log_scales'])                  [N, 1 or 3]
-  opacity= sigmoid(params['logit_opacities'])         [N, 1]
+load_scenesplat_backbone(checkpoint_path, pointcept_path, device):
+  - Adds pointcept_path to sys.path for importing pointcept
+  - Instantiates PointTransformerV3 with hardcoded config:
+      in_channels=11, stride=(2,2,2), enc_depths=(2,2,2,6),
+      enc_channels=(32,64,128,256), dec_channels=(768,512,256),
+      enable_flash=True, etc.
+  - Loads checkpoint, strips "module.backbone." prefix from state_dict keys
+  - Returns backbone in eval mode
 
-  feat = concat([
-      color_normalized,   # (color/255 - mean) / std  -> [N,3]
-      opacity,            # [N,1]
-      quat_normalized,    # [N,4]
-      scale,              # [N,3] (tile if isotropic)
-  ], dim=-1)              # [N, 11]
+prepare_gaussian_input(params, grid_size=0.02):
+  - Extracts from SplaTAM params:
+      coord  = params['means3D'].detach()                        [N, 3]
+      color  = sigmoid(params['rgb_colors']) * 255               [N, 3]
+      opacity = sigmoid(params['logit_opacities'])               [N, 1]
+      quat   = normalize(params['unnorm_rotations']), +real part [N, 4]
+      scale  = exp(params['log_scales']), tile to 3 if isotropic [N, 3]
+  - Color normalization: color / 127.5 - 1.0 (maps [0,255] → [-1,1])
+  - Voxel downsampling via _voxel_downsample (FNV hashing)
+  - feat = cat([color_norm, opacity, quat, scale], dim=-1) → [M, 11]
+  - grid_coord = floor((coord_ds - coord_ds.min(0)) / grid_size).int()
+  - offset = tensor([M]) (single scene, batch_size=1)
+  - Returns data_dict and inverse mapping [N] → voxel representatives
 
-Grid coord:
-  grid_size = 0.01 or 0.02 (meters)
-  grid_coord = floor((coord - coord.min(0)) / grid_size).int()
+_voxel_downsample(coord, grid_size):
+  - FNV hash-based voxel downsampling (matches pointcept's GridSample)
+  - Primes: 73856093, 19349669, 83492791
+  - Returns selected_indices [M] and inverse [N]
 
-Batch handling (single scene, batch_size=1):
-  offset = torch.tensor([N])  or  batch = torch.zeros(N, dtype=torch.long)
+run_scenesplat(backbone, autoencoder, params, grid_size, device):
+  - @torch.no_grad()
+  - Calls prepare_gaussian_input → PTv3 backbone → autoencoder.encode
+  - Maps 16-dim features back to all N points via inverse mapping
+  - Returns feat_16 [N, 16]
 
-n_cls for scenesplat = 16   (autoencoder latent dim)
-topk  for scenesplat = 16   (use all features; no sparse approximation needed,
-                              or keep sparse structure with topk=16 for compat)
+External dependencies:
+  - pointcept: /mnt/Data2/liyan/SceneSplat/pointcept/
+    - pointcept.models.point_transformer_v3.point_transformer_v3m1_base.PointTransformerV3
+    - pointcept.models.utils.structure.Point (used internally by PTv3)
+  - Added to sys.path at runtime, NOT copied into project
 
 ================================================================================
-DIFFERENCES FROM SEMSPLATAM
+MODIFIED_VER/SPLATAM/SPLATAM.PY — HELPER FUNCTIONS
+================================================================================
+
+File: src/slam/scenesplat/modified_ver/splatam/splatam.py
+
+Adapted from src/slam/semsplatam/modified_ver/splatam/splatam.py with:
+- No semantic loss functions (removed calc_hellinger, calc_cosine, calc_kl, etc.)
+- No uncertainty masking (removed get_uncert_mask, get_crop_mask)
+- Zero-initialized semantic logits (filled by SceneSplat, not by 2D annotation)
+- Identity seman_cls_ids (0..15 for all Gaussians)
+
+Functions:
+
+  setup_camera(w, h, k, w2c, near=0.01, far=100, num_channels=16):
+    - Creates Camera with num_channels=16 for semantic rendering
+    - Uses channel_rasterization.GaussianRasterizationSettings
+
+  initialize_params_with_seman(init_pt_cld, num_frames, mean3_sq_dist,
+                                gaussian_distribution, n_cls=16):
+    - params['semantic_logits'] = zeros [N, n_cls]
+    - variables['seman_cls_ids'] = arange(n_cls).expand(N, n_cls)
+    - All params wrapped as torch.nn.Parameter
+
+  initialize_first_timestep(dataset, num_frames, ..., n_cls=16):
+    - Does NOT take seman argument (unlike SemSplatam's version)
+    - Uses get_pointcloud from base splatam (xyz + rgb only)
+    - Calls initialize_params_with_seman
+
+  add_new_gaussians_with_seman(params, variables, curr_data, sil_thres,
+                                time_idx, mean_sq_dist_method,
+                                gaussian_distribution, n_cls=16):
+    - New Gaussians get zero semantic_logits and identity cls_ids
+    - Does NOT take seman in curr_data
+
+  initialize_optimizer(params, lrs_dict, tracking):
+    - Uses lrs_dict.get(k, 0.0) for missing keys
+    - This handles semantic_logits not being in tracking lrs (gets lr=0.0)
+    - NOTE: replica_splatam_s.py has semantic_logits=0.0001 in mapping lrs
+
+  transformed_params2semrendervar_sparse(params, transformed_gaussians, seen):
+    - Prepares rendervar for sparse semantic rasterization
+    - colors_precomp = params['semantic_logits'][seen]
+
+  set_camera_sparse(cam, cls_ids):
+    - Wraps cam into Camera_sparse with cls_ids
+
+  prune_gaussians_w_semantic(params, variables, optimizer, iter, prune_dict):
+    - Prunes Gaussians AND their semantic data
+
+  remove_points(to_remove, params, variables, optimizer):
+    - Removes entries from params, optimizer state, and variables
+    - Handles seman_cls_ids and timestep
+
+  densify(params, variables, optimizer, iter, densify_dict):
+    - Handles clone AND split cls_ids correctly
+    - Clone: extends seman_cls_ids with cloned entries
+    - Split: extends seman_cls_ids with repeated entries for split points
+
+================================================================================
+CONFIG — ActiveSceneSplat.py
+================================================================================
+
+File: configs/Replica/office0/ActiveSceneSplat.py
+
+SceneSplat-specific config keys (under slam dict):
+  method = "scenesplat"
+  num_topk_logits = 16
+  num_semantic_classes = 16
+  scenesplat_grid_size = 0.02
+  pointcept_path = '/mnt/Data2/liyan/SceneSplat'
+  scenesplat_checkpoint = '/mnt/Data4/scene_splat_7k/checkpoints/
+      lang-pretrain-concat-scan-ppv2-matt-mcmc-wo-normal-contrastive.pth'
+  autoencoder_checkpoint = '/mnt/Data2/liyan/SceneSplat/autoencoder/ckpt/
+      matterport/best_ckpt.pth'
+
+Removed vs SemSplatam (ActiveSem.py):
+  - oneformer_checkpoint, ade20k_checkpoint, coco_checkpoint
+  - oneformer_checkpoint_revision, oneformer_use_safetensors
+  - semantic_device, class_info_file, semantic_dir
+  - lambda_hel, lambda_cosine, uncert_mask_thres
+
+Room config (replica_splatam_s.py) inherited values:
+  - loss_weights has seman=0.05 — HARMLESS because base get_loss iterates
+    losses.items() not loss_weights.items(), so unused keys are ignored
+  - lrs has semantic_logits=0.0001 in mapping lrs — used for mapping optimizer
+
+================================================================================
+SLAM DISPATCH
+================================================================================
+
+File: src/slam/__init__.py
+
+Added case:
+  elif main_cfg.slam.method == "scenesplat":
+      info_printer("Initialize SceneSplat...", 0, "SceneSplat")
+      from src.slam.scenesplat.scenesplat import SceneSplatam
+      slam = SceneSplatam(main_cfg, info_printer, logger)
+
+================================================================================
+DATA FLOW
+================================================================================
+
+Frame t arrives:
+  → Tracking (geometry-only loss: RGB + depth via get_loss)
+  → Mapping (geometry-only loss, densify new Gaussians with zero semantics)
+  → run_scenesplat_on_map():
+      1. prepare_gaussian_input(params):
+         - Extract coords, colors, quats, scales, opacities from params
+         - Voxel downsample N points → M voxel representatives
+      2. PTv3 backbone(data_dict) → 768-dim features [M, 768]
+      3. Autoencoder.encode(feat_768) → 16-dim features [M, 16]
+      4. Map back via inverse: feat_16_ds[inverse] → [N, 16]
+      5. params['semantic_logits'] = Parameter(feat_16)
+      6. variables['seman_cls_ids'] = identity indices
+  → Planning/view selection uses render_semantic() with enriched Gaussians
+
+Gaussian parameter shapes:
+  params['means3D']:          [N, 3]   positions
+  params['rgb_colors']:       [N, 3]   (pre-sigmoid)
+  params['logit_opacities']:  [N, 1]   (pre-sigmoid)
+  params['unnorm_rotations']: [N, 4]   (pre-normalize)
+  params['log_scales']:       [N, 1 or 3] (pre-exp, isotropic or anisotropic)
+  params['semantic_logits']:  [N, 16]  (set by SceneSplat, not optimized by loss)
+  params['cam_unnorm_rots']:  [1, 4, T] camera rotations per frame
+  params['cam_trans']:        [1, 3, T] camera translations per frame
+
+  variables['seman_cls_ids']: [N, 16]  identity (arange(16).expand(N,16))
+  variables['timestep']:      [N]      when each Gaussian was created
+  variables['n_cls']:         16       number of semantic classes/features
+
+================================================================================
+RENDERING PIPELINE
+================================================================================
+
+RGB + Depth:
+  - diff_gaussian_rasterization.GaussianRasterizer (standard)
+  - transformed_params2rendervar → im [3,H,W]
+  - transformed_params2depthplussilhouette → depth_sil [2,H,W]
+
+Semantic:
+  - sparse_channel_rasterization.GaussianRasterizer (SEMRenderer_sparse)
+  - transformed_params2semrendervar_sparse → logits [16,H,W]
+  - set_camera_sparse wraps cam + cls_ids into Camera_sparse
+  - cls_ids are [N,16] identity indices (all channels used)
+  - channel_rasterization used for setup_camera (non-sparse, for cam bg size)
+
+================================================================================
+KNOWN ISSUES & CONSIDERATIONS
+================================================================================
+
+1. Memory growth: Gaussian count grows over time. SceneSplat processes ALL
+   Gaussians each time run_scenesplat_on_map() is called. At ~100K+ Gaussians,
+   PTv3 inference spikes can approach 48GB VRAM. Possible mitigations:
+   - Reduce SceneSplat frequency (run every N mapping steps instead of every one)
+   - Increase grid_size (e.g., 0.05) to reduce input points
+   - Add torch.cuda.empty_cache() after inference
+   - Chunk inference for very large maps
+
+2. Semantic features are NOT optimized by gradient descent. SceneSplat directly
+   overwrites params['semantic_logits'] after each mapping step. The semantic_logits
+   lr in replica_splatam_s.py (0.0001) applies during mapping but is overwritten
+   by run_scenesplat_on_map() immediately after. This is by design.
+
+3. New Gaussians added during densification start with zero semantic features.
+   They are enriched at the end of the mapping step when run_scenesplat_on_map()
+   runs on the full map.
+
+4. The voxel downsampling in scenesplat_model.py uses FNV hashing to match
+   pointcept's GridSample. After PTv3 inference on downsampled points, features
+   are mapped back to all original points via inverse mapping. Points in the
+   same voxel share the same features.
+
+5. Color normalization uses color / 127.5 - 1.0 (maps [0,255] to [-1,1]).
+   This differs from pointcept's NormalizeColor transform which uses dataset
+   mean/std, but matches the effective normalization used during SceneSplat
+   training on Gaussian splat data.
+
+================================================================================
+CHECKPOINT DETAILS
+================================================================================
+
+SceneSplat PTv3 backbone:
+  Path: /mnt/Data4/scene_splat_7k/checkpoints/
+        lang-pretrain-concat-scan-ppv2-matt-mcmc-wo-normal-contrastive.pth
+  Format: dict with keys [epoch, state_dict, optimizer, scheduler, scaler, best_metric_value]
+  state_dict: 393 keys, all prefixed "module.backbone.*"
+  Loading: strip "module.backbone." prefix, load into PointTransformerV3
+  First conv weight shape: [32, 5, 5, 5, 11] (confirms in_channels=11)
+
+Autoencoder:
+  Path: /mnt/Data2/liyan/SceneSplat/autoencoder/ckpt/matterport/best_ckpt.pth
+  Format: plain OrderedDict state_dict
+  Loading: Autoencoder(...).load_state_dict(checkpoint)
+
+pointcept source:
+  Path: /mnt/Data2/liyan/SceneSplat/pointcept/
+  Added to sys.path at runtime by load_scenesplat_backbone()
+  Key imports:
+    pointcept.models.point_transformer_v3.point_transformer_v3m1_base.PointTransformerV3
+    pointcept.models.utils.structure.Point (used internally by PTv3)
+
+================================================================================
+PTv3 BACKBONE CONFIG (hardcoded in scenesplat_model.py)
+================================================================================
+
+  in_channels=11     # color(3) + opacity(1) + quat(4) + scale(3)
+  order=("z", "z-trans", "hilbert", "hilbert-trans")
+  stride=(2, 2, 2)
+  enc_depths=(2, 2, 2, 6)
+  enc_channels=(32, 64, 128, 256)
+  enc_num_head=(2, 4, 8, 16)
+  enc_patch_size=(1024, 1024, 1024, 1024)
+  dec_depths=(2, 2, 2)
+  dec_channels=(768, 512, 256)    # output dim = 768
+  dec_num_head=(16, 16, 16)
+  dec_patch_size=(1024, 1024, 1024)
+  mlp_ratio=4
+  enable_flash=True
+  drop_path=0.3
+  shuffle_orders=True
+  pre_norm=True
+  pdnorm_conditions=("ScanNet", "S3DIS", "Structured3D")
+
+PTv3 input format:
+  data_dict = {
+    "coord":      [M, 3]  float, xyz positions
+    "feat":       [M, 11] float, cat(color_norm, opacity, quat, scale)
+    "grid_coord": [M, 3]  int, voxel grid coordinates
+    "offset":     [1]     long, tensor([M]) for single-batch
+  }
+
+PTv3 output: Point dict with .feat = [M, 768] (first decoder output)
+
+================================================================================
+REFERENCE FILES
+================================================================================
+
+Implementation (created):
+  src/slam/scenesplat/scenesplat.py
+  src/slam/scenesplat/scenesplat_model.py
+  src/slam/scenesplat/modified_ver/splatam/splatam.py
+  configs/Replica/office0/ActiveSceneSplat.py
+
+Base classes (read, not modified):
+  src/slam/splatam/splatam.py                    -- SplatamOurs base class
+  src/slam/splatam/eval_helper.py                -- eval/report_progress (BASE signatures)
+  src/slam/slam_model.py                         -- SlamModel abstract base
+
+Reference (SemSplatam, for comparison):
+  src/slam/semsplatam/semsplatam.py               -- SemSplatam class
+  src/slam/semsplatam/modified_ver/splatam/splatam.py    -- SemSplatam helpers
+  src/slam/semsplatam/modified_ver/splatam/eval_helper.py -- DIFFERENT signatures
+  src/slam/semsplatam/modified_ver/semantic/oneformer.py  -- what we replaced
+
+External (SceneSplat source, on disk):
+  /mnt/Data2/liyan/SceneSplat/autoencoder/model.py        -- Autoencoder class
+  /mnt/Data2/liyan/SceneSplat/pointcept/                  -- PTv3 model code
+  /mnt/Data2/liyan/SceneSplat/scripts/preprocess_gs_v2.py -- Gaussian extraction
+  /mnt/Data2/liyan/SceneSplat/configs/concat_dataset/
+    lang-pretrain-concat-scan-ppv2-matt-mcmc-wo-normal-contrastive.py -- config
+
+Config (shared with semsplatam):
+  configs/Replica/replica_splatam_s.py            -- room-level splatam config
+    - loss_weights: { im=0.5, depth=1.0, seman=0.05 }
+    - mapping lrs: { means3D=0.00014, rgb_colors=0.0028, semantic_logits=0.0001, ... }
+    - tracking lrs: { cam_unnorm_rots=0.001, cam_trans=0.004 }
+      (no semantic_logits in tracking lrs — handled by .get(k, 0.0))
+
+================================================================================
+COMPARISON: SemSplatam vs SceneSplatam
 ================================================================================
 
 | Aspect                  | SemSplatam (OneFormer)           | SceneSplatam (SceneSplat)        |
 |-------------------------|----------------------------------|----------------------------------|
+| Parent class            | SplatamOurs                      | SplatamOurs                      |
 | Model input             | 2D RGB image per frame           | 3D Gaussian point cloud          |
 | When model runs         | Every frame (semantic_annotation)| After mapping steps (per-map)    |
 | Feature dim             | 102 (ADE20K classes)             | 16 (autoencoder latent)          |
-| Supervision target      | Rendered seman vs oneformer logits| Direct assignment to params      |
-| Semantic loss           | Yes (cosine + Hellinger + KL)    | Not needed (direct update)       |
+| Supervision target      | Rendered seman vs oneformer logits| Direct assignment to params     |
+| Semantic loss           | Yes (cosine + Hellinger + KL)    | None (direct overwrite)          |
 | Sparse representation   | topk=16 of 102 classes           | all 16 features (trivial sparse) |
 | Class IDs (seman_cls_ids)| used to index into 102 classes  | 0..15 (identity, always full)    |
-| GPU device              | semantic_device (e.g. cuda:1)    | same device as SLAM (cuda:0)     |
-
-================================================================================
-FILES TO CREATE
-================================================================================
-
-src/slam/scenesplat/
-  __init__.py
-  scenesplat.py                  -- main class SceneSplatam(SplatamOurs)
-  modified_ver/
-    splatam/
-      splatam.py                 -- adapted versions of initialize_first_timestep,
-                                    add_new_gaussians, get_loss (no semantic loss),
-                                    initialize_params (16-dim semantic_logits)
-    semantic/
-      scenesplat.py              -- SceneSplat + Autoencoder loader and inference
-                                    function: run_scenesplat(params) -> feat[N,16]
-
-configs/Replica/{scene}/ActiveSceneSplat.py  -- new config per scene
-  (can copy ActiveSem.py and change method, replace oneformer keys with
-   scenesplat_checkpoint and autoencoder_checkpoint keys,
-   set num_semantic_classes=16, num_topk_logits=16)
-
-src/slam/__init__.py             -- add "scenesplat" case
-
-================================================================================
-KEY IMPORTS NEEDED IN scenesplat.py
-================================================================================
-
-# SceneSplat model lives in /mnt/Data2/liyan/SceneSplat/pointcept/
-# Must add /mnt/Data2/liyan/SceneSplat to sys.path, or copy/symlink
-# the pointcept package into third_parties/ or libs/
-
-from pointcept.models.point_transformer_v3.point_transformer_v3m1_base import PointTransformerV3
-from pointcept.models.utils.structure import Point
-
-# Autoencoder lives in /mnt/Data2/liyan/SceneSplat/autoencoder/model.py
-# Similarly needs to be importable
-
-================================================================================
-OPEN QUESTIONS / DECISIONS NEEDED
-================================================================================
-
-1. Where to import pointcept from?
-   Option A: Add /mnt/Data2/liyan/SceneSplat to sys.path at runtime
-   Option B: Copy pointcept/ into third_parties/scenesplat/
-   Option C: Symlink (fragile for portability)
-   -> Recommendation: copy into third_parties/scenesplat/ and add autoencoder/model.py
-      alongside it, to keep the project self-contained.
-
-2. When exactly to run SceneSplat inference?
-   Option A: Every mapping step (expensive, ~seconds per call)
-   Option B: Every N frames (e.g., every map_every frames)
-   Option C: Only at keyframes
-   Option D: Only at print_and_save_result / eval time
-   -> Recommendation: every map_every frames (matches mapping cadence),
-      with a configurable scenesplat_update_freq in the slam config.
-
-3. How to handle the first frame (no Gaussians yet)?
-   -> Initialize params['semantic_logits'] as zeros [N, 16] for the first frame,
-      then run SceneSplat after the first mapping step.
-
-4. Should the semantic loss be kept (comparing rendered features to SceneSplat output)?
-   Option A: No loss — SceneSplat directly writes to params['semantic_logits']
-             (no gradient through semantic logits)
-   Option B: Keep loss — SceneSplat output is the target, rendered logits optimized to match
-   -> Recommendation: Option A for simplicity; Option B if semantic rendering quality matters.
-
-5. What grid_size to use for SceneSplat's GridSample?
-   -> 0.02m (same as training), but may need tuning for indoor scenes.
-
-6. Autoencoder dims to pass at init:
-   encoder_hidden_dims = [512, 256, 128, 64, 32, 16]
-   decoder_hidden_dims = [32, 64, 128, 256, 256, 512]
-   in_feature_dim = 768
-
-================================================================================
-RELEVANT EXISTING FILES FOR REFERENCE
-================================================================================
-
-src/slam/semsplatam/semsplatam.py               -- primary reference class
-src/slam/semsplatam/modified_ver/semantic/oneformer.py  -- what to replace
-src/slam/semsplatam/modified_ver/splatam/splatam.py     -- helper functions
-src/slam/semsplatam/modified_ver/splatam/eval_helper.py -- eval functions
-src/slam/splatam/splatam.py                     -- base class
-configs/Replica/office0/ActiveSem.py            -- reference config
-configs/Replica/replica_splatam_s.py            -- room-level splatam config
-
-/mnt/Data2/liyan/SceneSplat/autoencoder/model.py         -- Autoencoder class
-/mnt/Data2/liyan/SceneSplat/pointcept/                   -- PTv3 model code
-/mnt/Data2/liyan/SceneSplat/scripts/preprocess_gs_v2.py  -- shows Gaussian attribute extraction
-/mnt/Data2/liyan/SceneSplat/configs/concat_dataset/
-  lang-pretrain-concat-scan-ppv2-matt-mcmc-wo-normal-contrastive.py  -- model config
-
-SceneSplat ckpt: /mnt/Data4/scene_splat_7k/checkpoints/
-  lang-pretrain-concat-scan-ppv2-matt-mcmc-wo-normal-contrastive.pth
-Autoencoder ckpt: /mnt/Data2/liyan/SceneSplat/autoencoder/ckpt/matterport/best_ckpt.pth
+| GPU device              | semantic_device (e.g. cuda:1)    | same device as SLAM              |
+| eval_helper imports     | semsplatam/modified_ver/splatam/ | splatam/ (base)                  |
+| Speed                   | ~1x (baseline)                   | ~15x faster                      |

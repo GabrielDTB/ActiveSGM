@@ -839,15 +839,15 @@ class SceneSplatam(SplatamOurs):
                      wandb_run=self.wandb_run, wandb_save_qual=config['wandb']['eval_save_qual'],
                      mapping_iters=config['mapping']['num_iters'],
                      add_new_gaussians=config['mapping']['add_new_gaussians'],
-                     eval_every=config['eval_every'],
-                     ignore_first_frame=ignore_first_frame)
+                     eval_every=config['eval_every'],)
+                     # ignore_first_frame=ignore_first_frame)
             else:
                 eval(dataset, params, len(dataset), eval_dir,
                      sil_thres=config['mapping']['sil_thres'],
                      mapping_iters=config['mapping']['num_iters'],
                      add_new_gaussians=config['mapping']['add_new_gaussians'],
-                     eval_every=config['eval_every'],
-                     ignore_first_frame=ignore_first_frame)
+                     eval_every=config['eval_every'],)
+                     # ignore_first_frame=ignore_first_frame)
 
         # Save params
         params['timestep'] = variables['timestep']
