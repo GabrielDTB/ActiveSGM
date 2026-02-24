@@ -11,7 +11,7 @@ build-backend = "hatchling.build"
 requires = ["hatchling"]
 
 [tool.pixi.workspace]
-channels = ["conda-forge"]
+channels = ["conda-forge", "aihabitat", "esri"]
 platforms = ["linux-64"]
 preview = ["pixi-build"]
 
@@ -21,8 +21,84 @@ cuda = "12.2"
 [tool.pixi.feature.viper.dependencies]
 cuda-version = "12.2.*"
 
+[tool.pixi.dependencies]
+torchvision = "*"
+pytorch3d = "*"
+tensorboardx = "*"
+numba = "*"
+mmengine = "*"
+scipy = "*"
+matplotlib = "*"
+tqdm = "*"
+pillow = "*"
+trimesh = "*"
+yaml = "*"
+open3d = "*"
+mediapy = "*"
+imgviz = "*"
+natsort = "*"
+opencv = "*"
+kornia = "*"
+marching_cubes = "*"
+plyfile = "*"
+wandb = "*"
+pytorch-msssim = "*"
+torchmetrics = "*"
+transformers = "*"
+sharedarray = "*"
+timm = "*"
+einops = "*"
+flash-attn = "*"
+# habitat-sim does this very funkily...
+habitat-sim = ">=0.3.3,<0.4"
+withbullet = ">=2.0,<3"
+headless = ">=2.0,<3"
+# For tinycudann
+setuptools = "*"
+pytorch-gpu = "*"
+numpy = "*"
+# For spconv (?)
+pccm = "*"
+
 [tool.pixi.feature.dev.dependencies]
 ruff = "*"
+
+[tool.pixi.pypi-options]
+no-build-isolation = [
+  "tinycudann",
+  "diff_gaussian_rasterization",
+  "torch-sparse",
+  "torch-scatter",
+  "channel_rasterization",
+  "sparse_channel_rasterization",
+  "pointops",
+  "pointops2",
+  "pointgroup_ops"
+]
+
+[tool.pixi.pypi-dependencies]
+tinycudann = {git = "https://github.com/NVlabs/tiny-cuda-nn/", subdirectory = "bindings/torch"}
+diff_gaussian_rasterization = {git = "https://github.com/JonathonLuiten/diff-gaussian-rasterization-w-depth"}
+channel_rasterization = {path = "third_parties/channel_rasterization/channel-rasterization"}
+sparse_channel_rasterization = {path = "third_parties/sparse_channel_rasterization/sparse-channel-rasterization"}
+pointops = {path = "./libs/pointops"}
+pointops2 = {path = "./libs/pointops2"}
+pointgroup_ops = {path = "./libs/pointgroup_ops"}
+attrs = ">=19.1.0"
+gitpython = "*"
+imageio = "*"
+imageio-ffmpeg = "*"
+numpy-quaternion = "*"
+torch-sparse = "*"
+torch-scatter = "*"
+torch-geometric = "*"
+# There is no cu122 version of spconv as of 2026-02-17.
+# Building from github doesn't work because a dependency it has isn't installable without also building it.
+spconv-cu121 = "*"
+
+[tool.pixi.activation.env]
+HEADLESS = "on"
+BULLET = "on"
 
 [tool.pixi.environments]
 viper = ["viper"]
