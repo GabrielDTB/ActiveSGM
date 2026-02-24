@@ -1,0 +1,3 @@
+"""
+SplaTAM utils package initializer.
+"""
