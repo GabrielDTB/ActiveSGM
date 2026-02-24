@@ -2,6 +2,7 @@ import torch
 import heapq
 import numpy as np
 
+
 def generate_start_end_points(occ_grid: torch.Tensor, vxl_size: float = 0.05):
     """
     Generates a start point and end point in free space based on the occupancy grid.
@@ -29,17 +30,17 @@ def generate_start_end_points(occ_grid: torch.Tensor, vxl_size: float = 0.05):
     free_mask = free_mask.long()
     # A cube is free if all its eight corners are free
     free_voxels = (
-        free_mask[:-1, :-1, :-1] +
-        free_mask[1:, :-1, :-1] +
-        free_mask[:-1, 1:, :-1] +
-        free_mask[:-1, :-1, 1:] +
-        free_mask[1:, 1:, :-1] +
-        free_mask[1:, :-1, 1:] +
-        free_mask[:-1, 1:, 1:] +
-        free_mask[1:, 1:, 1:]
+        free_mask[:-1, :-1, :-1]
+        + free_mask[1:, :-1, :-1]
+        + free_mask[:-1, 1:, :-1]
+        + free_mask[:-1, :-1, 1:]
+        + free_mask[1:, 1:, :-1]
+        + free_mask[1:, :-1, 1:]
+        + free_mask[:-1, 1:, 1:]
+        + free_mask[1:, 1:, 1:]
     )
 
-    free_voxels = (free_voxels>0)
+    free_voxels = free_voxels > 0
 
     # Find indices of free voxels
     free_indices = torch.nonzero(free_voxels)
@@ -56,10 +57,15 @@ def generate_start_end_points(occ_grid: torch.Tensor, vxl_size: float = 0.05):
         start_point = (start_idx.float() + torch.rand(3)) * vxl_size
         end_point = (end_idx.float() + torch.rand(3)) * vxl_size
 
-        if not is_line_free(start_point, end_point, free_voxels, vxl_size, vxl_size/10):    
+        if not is_line_free(
+            start_point, end_point, free_voxels, vxl_size, vxl_size / 10
+        ):
             return start_point, end_point
 
-def save_3d_map_with_path(occ_grid, start_loc, end_loc, path, filename='map_with_path.ply', vxl_size=0.05):
+
+def save_3d_map_with_path(
+    occ_grid, start_loc, end_loc, path, filename="map_with_path.ply", vxl_size=0.05
+):
     """
     Save a 3D map with the path as a .ply file.
 
@@ -84,30 +90,25 @@ def save_3d_map_with_path(occ_grid, start_loc, end_loc, path, filename='map_with
     free_mask = free_mask.long()
     # A cube is free if all its eight corners are free
     free_voxels = (
-        free_mask[:-1, :-1, :-1] +
-        free_mask[1:, :-1, :-1] +
-        free_mask[:-1, 1:, :-1] +
-        free_mask[:-1, :-1, 1:] +
-        free_mask[1:, 1:, :-1] +
-        free_mask[1:, :-1, 1:] +
-        free_mask[:-1, 1:, 1:] +
-        free_mask[1:, 1:, 1:]
+        free_mask[:-1, :-1, :-1]
+        + free_mask[1:, :-1, :-1]
+        + free_mask[:-1, 1:, :-1]
+        + free_mask[:-1, :-1, 1:]
+        + free_mask[1:, 1:, :-1]
+        + free_mask[1:, :-1, 1:]
+        + free_mask[:-1, 1:, 1:]
+        + free_mask[1:, 1:, 1:]
     )
-    
+
     D, H, W = free_voxels.shape
-    occupied_mask = (free_voxels<1).flatten().numpy()
+    occupied_mask = (free_voxels < 1).flatten().numpy()
     # Ensure input is on CPU and in numpy format
     start_loc_np = start_loc.cpu().numpy()
     end_loc_np = end_loc.cpu().numpy()
-    path_np = path#.cpu().numpy()
+    path_np = path  # .cpu().numpy()
 
     # Create a meshgrid of voxel indices
-    zz, yy, xx = np.meshgrid(
-        np.arange(D),
-        np.arange(H),
-        np.arange(W),
-        indexing='ij'
-    )
+    zz, yy, xx = np.meshgrid(np.arange(D), np.arange(H), np.arange(W), indexing="ij")
     voxel_indices = np.vstack((zz.flatten(), yy.flatten(), xx.flatten())).T
     occupied_voxels = voxel_indices[occupied_mask]
 
@@ -115,9 +116,9 @@ def save_3d_map_with_path(occ_grid, start_loc, end_loc, path, filename='map_with
     occupied_points = occupied_voxels * vxl_size
 
     # Process the path, start, and end locations
-    path_points = path_np #* vxl_size
-    start_point = start_loc_np #* vxl_size
-    end_point = end_loc_np #* vxl_size
+    path_points = path_np  # * vxl_size
+    start_point = start_loc_np  # * vxl_size
+    end_point = end_loc_np  # * vxl_size
 
     # Combine all points
     all_points = np.vstack((occupied_points, path_points, start_point, end_point))
@@ -131,7 +132,7 @@ def save_3d_map_with_path(occ_grid, start_loc, end_loc, path, filename='map_with
     # Occupied voxels: gray
     colors[:num_occupied] = [0.5, 0.5, 0.5]
     # Path: red
-    colors[num_occupied:num_occupied + num_path] = [1.0, 0.0, 0.0]
+    colors[num_occupied : num_occupied + num_path] = [1.0, 0.0, 0.0]
     # Start point: green
     colors[num_occupied + num_path] = [0.0, 1.0, 0.0]
     # End point: blue
@@ -145,6 +146,7 @@ def save_3d_map_with_path(occ_grid, start_loc, end_loc, path, filename='map_with
     # Save to .ply file
     o3d.io.write_point_cloud(filename, pcd)
 
+
 def interpolate_path(A: torch.Tensor, B: torch.Tensor, step: float):
     """
     Generates a list of intermediate points between two locations, A and B, with a given step size,
@@ -157,7 +159,7 @@ def interpolate_path(A: torch.Tensor, B: torch.Tensor, step: float):
 
     Returns:
         List[torch.Tensor]: A list of tensors representing intermediate points from A to B, excluding A and including B.
-    
+
     Raises:
         ValueError: If A and B have different shapes or step size is non-positive.
     """
@@ -180,39 +182,54 @@ def interpolate_path(A: torch.Tensor, B: torch.Tensor, step: float):
     # points = torch.stack(points)
     return points
 
+
 def interpolate_path_seq(path_positions, step_times):
     breakpoint()
     # Ensure step_times is a tensor and matches the device
     # if isinstance(step_times, int):
-    step_times = torch.tensor([step_times] * (len(path_positions) - 1), device=path_positions.device)
-    
+    step_times = torch.tensor(
+        [step_times] * (len(path_positions) - 1), device=path_positions.device
+    )
+
     # Total number of interpolation points (sum of step_times) plus original points
     total_steps = step_times.sum() + len(path_positions)
-    
+
     # Calculate cumulative indices for placing original points
-    cum_steps = torch.cat([torch.tensor([0], device=path_positions.device), step_times.cumsum(0)])
-    
+    cum_steps = torch.cat(
+        [torch.tensor([0], device=path_positions.device), step_times.cumsum(0)]
+    )
+
     # Initialize tensor to hold interpolated path
     interpolated_positions = torch.zeros(total_steps, 3, device=path_positions.device)
-    
+
     # Place original points in the interpolated tensor at cumulative indices
     interpolated_positions[cum_steps] = path_positions
-    
+
     # Calculate weights for each segment in a fully vectorized way
     segments = path_positions[1:] - path_positions[:-1]
-    weights = torch.cat([torch.linspace(0, 1, steps.item() + 2, device=path_positions.device)[1:-1]
-                         for steps in step_times])
-    
+    weights = torch.cat(
+        [
+            torch.linspace(0, 1, steps.item() + 2, device=path_positions.device)[1:-1]
+            for steps in step_times
+        ]
+    )
+
     # Broadcast and compute interpolated positions
     weights = weights.unsqueeze(1)  # Shape [total_interpolations, 1] for broadcasting
-    interpolated_points = (path_positions[:-1].repeat_interleave(step_times) +
-                           weights * segments.repeat_interleave(step_times))
-    
+    interpolated_points = path_positions[:-1].repeat_interleave(
+        step_times
+    ) + weights * segments.repeat_interleave(step_times)
+
     # Place interpolated points in their positions in the interpolated path tensor
-    non_original_indices = torch.arange(total_steps, device=path_positions.device).isin(cum_steps).logical_not()
+    non_original_indices = (
+        torch.arange(total_steps, device=path_positions.device)
+        .isin(cum_steps)
+        .logical_not()
+    )
     interpolated_positions[non_original_indices] = interpolated_points
-    
+
     return interpolated_positions
+
 
 def is_line_free(start_loc, end_loc, free_space, voxel_size, step_size):
     # Compute the distance between start and end
@@ -226,7 +243,9 @@ def is_line_free(start_loc, end_loc, free_space, voxel_size, step_size):
     # Ensure indices are within the bounds of the free_space grid
     D, H, W = free_space.shape
 
-    indices = torch.clamp(indices, min=torch.tensor([0, 0, 0]), max=torch.tensor([D - 1, H - 1, W - 1]))
+    indices = torch.clamp(
+        indices, min=torch.tensor([0, 0, 0]), max=torch.tensor([D - 1, H - 1, W - 1])
+    )
     # Remove duplicate indices
     indices = indices.unique(dim=0)
     # Check if all the indices are in free space
@@ -236,9 +255,17 @@ def is_line_free(start_loc, end_loc, free_space, voxel_size, step_size):
             return False
     return True
 
-def path_planning(occ_grid: torch.Tensor, start_loc: torch.Tensor, end_loc: torch.Tensor, max_trans: float = 0.1,step_times = 1.0, vxl_size: float = 0.05) -> torch.Tensor:
-    """ path planning using occupancy grid, only plan based on free regions (including both type1 and type2)
- 
+
+def path_planning(
+    occ_grid: torch.Tensor,
+    start_loc: torch.Tensor,
+    end_loc: torch.Tensor,
+    max_trans: float = 0.1,
+    step_times=1.0,
+    vxl_size: float = 0.05,
+) -> torch.Tensor:
+    """path planning using occupancy grid, only plan based on free regions (including both type1 and type2)
+
     Args:
         occ_grid: [D,H,W], with voxel size V
             - 1: occupied
@@ -249,7 +276,7 @@ def path_planning(occ_grid: torch.Tensor, start_loc: torch.Tensor, end_loc: torc
         end_loc: [3] assumed to be in free region
         max_trans: maximum translation step (in meter)
         vxl_size: voxel size (in meter)
-        
+
     Returns:
         path: [N,3], planned path in voxel space
     """
@@ -267,28 +294,31 @@ def path_planning(occ_grid: torch.Tensor, start_loc: torch.Tensor, end_loc: torc
     free_mask = free_mask.long()
     # Compute free_space
     free_space = (
-        free_mask[:-1, :-1, :-1] +
-        free_mask[1:, :-1, :-1] +
-        free_mask[:-1, 1:, :-1] +
-        free_mask[:-1, :-1, 1:] +
-        free_mask[1:, 1:, :-1] +
-        free_mask[1:, :-1, 1:] +
-        free_mask[:-1, 1:, 1:] +
-        free_mask[1:, 1:, 1:]
+        free_mask[:-1, :-1, :-1]
+        + free_mask[1:, :-1, :-1]
+        + free_mask[:-1, 1:, :-1]
+        + free_mask[:-1, :-1, 1:]
+        + free_mask[1:, 1:, :-1]
+        + free_mask[1:, :-1, 1:]
+        + free_mask[:-1, 1:, 1:]
+        + free_mask[1:, 1:, 1:]
     )
-    free_space = (free_space>0)
+    free_space = free_space > 0
     # Check if start_idx and end_idx are in free_space
     if not free_space[start_idx[0], start_idx[1], start_idx[2]]:
-        raise ValueError('Start location is not in free space')
+        raise ValueError("Start location is not in free space")
     if not free_space[end_idx[0], end_idx[1], end_idx[2]]:
-        raise ValueError('End location is not in free space')
-    
-    #proceed with A* algorithm
+        raise ValueError("End location is not in free space")
+
+    # proceed with A* algorithm
     # path_positions = astar(occ_grid, free_space, start_loc, end_loc, max_trans, vxl_size)
-    path_positions = astar(free_space, start_loc, end_loc, max_trans*step_times, vxl_size)
+    path_positions = astar(
+        free_space, start_loc, end_loc, max_trans * step_times, vxl_size
+    )
 
     # path_positions = interpolate_path_seq(path_positions, step_times)
     return path_positions
+
 
 def astar(free_space, start_loc, end_loc, max_trans, voxel_size):
     """
@@ -305,6 +335,7 @@ def astar(free_space, start_loc, end_loc, max_trans, voxel_size):
         path: torch.Tensor of shape [N, 3], planned path in continuous space
     """
     import heapq
+
     # Initialize open list and closed set for start
     open_list = []
     start_key = tuple(start_loc.tolist())
@@ -355,14 +386,16 @@ def astar(free_space, start_loc, end_loc, max_trans, voxel_size):
         current_pos_end = torch.tensor(current_key_end)
 
         # Check if we have reached the goal
-        if is_line_free(current_pos, current_pos_end, free_space, voxel_size, voxel_size/10):#or num_step > 1000
+        if is_line_free(
+            current_pos, current_pos_end, free_space, voxel_size, voxel_size / 10
+        ):  # or num_step > 1000
             # print("number of steps: ", str(num_step))
             # interplate path
             # if num_step > 1000:
             #     path = [end_loc]
             # else:
             path = interpolate_path(current_pos, current_pos_end, max_trans)
-            path#.reverse()
+            path  # .reverse()
 
             pos_key = current_key
             pos_key_end = current_key_end
@@ -385,7 +418,7 @@ def astar(free_space, start_loc, end_loc, max_trans, voxel_size):
 
             path = torch.stack(path, dim=0)
             return path
-        
+
         if current_key not in closed_set:
             closed_set.add(current_key)
             # For each direction, generate a neighbor position
@@ -397,7 +430,9 @@ def astar(free_space, start_loc, end_loc, max_trans, voxel_size):
                     continue
 
                 # Check if path from current_pos to neighbor_pos is free
-                if not is_line_free(current_pos, neighbor_pos, free_space, voxel_size, voxel_size/10):
+                if not is_line_free(
+                    current_pos, neighbor_pos, free_space, voxel_size, voxel_size / 10
+                ):
                     continue
 
                 # Compute tentative g_score
@@ -420,18 +455,31 @@ def astar(free_space, start_loc, end_loc, max_trans, voxel_size):
                     continue
 
                 # Check if path from current_pos to neighbor_pos is free
-                if not is_line_free(current_pos_end, neighbor_pos_end, free_space, voxel_size, voxel_size/10):
+                if not is_line_free(
+                    current_pos_end,
+                    neighbor_pos_end,
+                    free_space,
+                    voxel_size,
+                    voxel_size / 10,
+                ):
                     continue
 
                 # Compute tentative g_score
                 tentative_g_end = g_score_end[current_key_end] + max_trans
 
-                if neighbor_key_end not in g_score_end or tentative_g_end < g_score_end[neighbor_key_end]:
+                if (
+                    neighbor_key_end not in g_score_end
+                    or tentative_g_end < g_score_end[neighbor_key_end]
+                ):
                     g_score_end[neighbor_key_end] = tentative_g_end
                     parents_end[neighbor_key_end] = current_key_end
-                    f_score_end = tentative_g_end + heuristic(neighbor_key_end, current_key)
-                    heapq.heappush(open_list_end, (f_score_end.item(), neighbor_key_end))
+                    f_score_end = tentative_g_end + heuristic(
+                        neighbor_key_end, current_key
+                    )
+                    heapq.heappush(
+                        open_list_end, (f_score_end.item(), neighbor_key_end)
+                    )
 
         num_step = num_step + 1
-        
-    raise ValueError('No path found')
+
+    raise ValueError("No path found")

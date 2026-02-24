@@ -22,7 +22,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 
-
 import cv2
 import mmengine
 import numpy as np
@@ -35,43 +34,41 @@ from src.utils.general_utils import InfoPrinter
 from third_parties.coslam.utils import colormap_image
 
 
-class Visualizer():
-    def __init__(self, 
-                 main_cfg    : mmengine.Config,
-                 info_printer: InfoPrinter
-                 ) -> None:
+class Visualizer:
+    def __init__(self, main_cfg: mmengine.Config, info_printer: InfoPrinter) -> None:
         """
         Args:
             main_cfg (mmengine.Config): Configuration
             info_printer (InfoPrinter): information printer
-    
+
         Attributes:
             main_cfg (mmengine.Config): configurations
             vis_cfg (mmengine.Config) : visualizer model configurations
             info_printer (InfoPrinter): information printer
-            
+
         """
         self.main_cfg = main_cfg
         self.vis_cfg = main_cfg.visualizer
         self.info_printer = info_printer
 
     def update_step(self, step):
-        """ update step information
-    
+        """update step information
+
         Args:
             step (int): step size
-    
+
         """
         self.step = step
 
-    def visualize_rgbd(self,
-                       rgb       : torch.Tensor,
-                       depth     : torch.Tensor,
-                       max_depth : float = 100.,
-                       vis_size  : int = 320,
-                       return_vis: bool = False
-                       ) -> Union[None, np.ndarray]:
-        """ visualiz RGB-D 
+    def visualize_rgbd(
+        self,
+        rgb: torch.Tensor,
+        depth: torch.Tensor,
+        max_depth: float = 100.0,
+        vis_size: int = 320,
+        return_vis: bool = False,
+    ) -> Union[None, np.ndarray]:
+        """visualiz RGB-D
         Args:
             rgb (torch.Tensor, [H,W,3]): color map. Range: 0-1
             depth (torch.Tensor, [H,W]): depth map.
@@ -80,7 +77,7 @@ class Visualizer():
             return_vis (bool)          : return visualization (OpenCV format) if True
 
         Returns:
-            Union: 
+            Union:
                 - image (np.ndarray, [H,W,3]): RGB-D visualization if return_vis
         """
         ## process RGB ##
@@ -101,6 +98,6 @@ class Visualizer():
         if return_vis:
             return image
         else:
-            cv2.namedWindow('RGB-D', cv2.WINDOW_AUTOSIZE)
-            cv2.imshow('RGB-D', image)
+            cv2.namedWindow("RGB-D", cv2.WINDOW_AUTOSIZE)
+            cv2.imshow("RGB-D", image)
             key = cv2.waitKey(1)

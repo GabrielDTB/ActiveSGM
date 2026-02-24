@@ -22,7 +22,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 
-
 from matplotlib import cm
 import numpy as np
 import random
@@ -35,7 +34,7 @@ def fix_random_seed(random_seed: int) -> None:
 
     Args:
         seed (int): random seed
-    
+
     Returns:
         None
     """
@@ -57,7 +56,7 @@ def fix_random_seed(random_seed: int) -> None:
 
 
 def update_module_step(step: int, modules: List) -> None:
-    """ update module step number. Require modules element to have 'self.update_step(step)' function
+    """update module step number. Require modules element to have 'self.update_step(step)' function
 
     Args:
         step (int): step number
@@ -67,53 +66,54 @@ def update_module_step(step: int, modules: List) -> None:
         module.update_step(step)
 
 
-class InfoPrinter():
-    def __init__(self, 
-                 method    : str = None,
-                 total_step: int = 0,
-                 scene     : str = None,
-                 ):
-        """ initialize information printer
-    
+class InfoPrinter:
+    def __init__(
+        self,
+        method: str = None,
+        total_step: int = 0,
+        scene: str = None,
+    ):
+        """initialize information printer
+
         Args:
             method (str)    : method name
             total_step (int): total number of iterations
             scene (str)     : scene name
-    
+
         Attributes:
             method (str)    : method name
             str_len (int)   : limit the string within this length
             total_step (int): total number of iterations
             scene (str)     : scene name
-            
+
         """
         self.method = method
         self.str_len = 20
         self.total_step = total_step
         self.scene = scene
-    
+
     def update_total_step(self, total_step: int) -> None:
-        """ update total step
-    
+        """update total step
+
         Args:
             total_step (int): total step
-    
+
         Attributes:
             total_step (int): total step
         """
         self.total_step = total_step
-    
+
     def update_scene(self, scene: str) -> None:
-        """ update scene
-    
+        """update scene
+
         Args:
             scene (str): total step
-    
+
         Attributes:
             scene (str): total step
         """
         self.scene = scene
-    
+
     def adjust_string_length(self, desired_length: int, input_str: str) -> str:
         """
         Adjusts the length of a string to a specified length by padding with spaces or cutting the string.
@@ -131,20 +131,21 @@ class InfoPrinter():
         # If the input string is longer than the desired length, cut it to fit
         else:
             return input_str[:desired_length]
-    
-    def print(self,
-            msg   : str = "",
-            step  : int = None,
-            module: str = None,
-            ) -> str:
-        """ print information in the format of 
+
+    def print(
+        self,
+        msg: str = "",
+        step: int = None,
+        module: str = None,
+    ) -> str:
+        """print information in the format of
         | [{self.method}] | Step-{step} | {module}   | {msg}
-    
+
         Args:
             msg (str)   : message string
             step (int)  : step
             module (str): module name
-    
+
         """
         info = f"| [{self.method}] | "
         if self.scene is not None:
@@ -156,7 +157,7 @@ class InfoPrinter():
             info += f"{module_str} | "
         info += msg
         print(info)
-    
+
     def __call__(self, *args, **kwargs):
         self.print(*args, **kwargs)
 
@@ -172,9 +173,9 @@ def update_results_file(results: Dict[str, float], file_path: str) -> None:
     ### Read existing results from the file ###
     existing_results = {}
     try:
-        with open(file_path, 'r') as file:
+        with open(file_path, "r") as file:
             for line in file:
-                key, value = line.strip().split(',') 
+                key, value = line.strip().split(",")
                 existing_results[key] = float(value)
     except FileNotFoundError:
         ### If the file does not exist, we'll create it later ###
@@ -184,38 +185,39 @@ def update_results_file(results: Dict[str, float], file_path: str) -> None:
     existing_results.update(results)
 
     ### Write the updated results back to the file ###
-    with open(file_path, 'w') as file:
+    with open(file_path, "w") as file:
         for key, value in existing_results.items():
-            file.write(f'{key},{value}\n')
+            file.write(f"{key},{value}\n")
 
 
 def create_class_colormap(num_class: int) -> np.ndarray:
     """
     Creates a fixed colormap for a given number of semantic classes using a matplotlib colormap.
-    
+
     Args:
         num_class (int): Number of classes.
-        
+
     Returns:
         np.ndarray: Array of colors where the index represents the class ID.
     """
-    #colormap = cm.get_cmap('tab10', num_class)  ### You can use any colormap you prefer ###
-    colormap = cm.get_cmap('gist_ncar', num_class)
-    fixed_colormap = (colormap(np.linspace(0, 1, num_class))[:, :3] * 255).astype(np.uint8)
+    # colormap = cm.get_cmap('tab10', num_class)  ### You can use any colormap you prefer ###
+    colormap = cm.get_cmap("gist_ncar", num_class)
+    fixed_colormap = (colormap(np.linspace(0, 1, num_class))[:, :3] * 255).astype(
+        np.uint8
+    )
     return fixed_colormap
 
 
 def apply_colormap(image: np.ndarray, colormap: np.ndarray) -> np.ndarray:
     """
     Applies a colormap to an image with semantic IDs.
-    
+
     Args:
         image (np.ndarray): Image array with semantic IDs.
         colormap (np.ndarray): Colormap array where the index represents the class ID.
-        
+
     Returns:
         np.ndarray: RGB image with colormap applied.
     """
     colored_image = colormap[image]
     return colored_image
-

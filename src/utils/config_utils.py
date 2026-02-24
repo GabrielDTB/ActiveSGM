@@ -22,13 +22,12 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 
-
 import yaml
 from typing import Dict
 
 
 def load_config(path: str, default_path=None) -> Dict:
-    """ Loads config file.
+    """Loads config file.
 
     Args:
         path (str): path to config file.
@@ -38,18 +37,18 @@ def load_config(path: str, default_path=None) -> Dict:
         cfg (dict): config dict.
     """
     ### load configuration from file itself ###
-    with open(path, 'r') as f:
+    with open(path, "r") as f:
         cfg_special = yaml.full_load(f)
 
     ### check if we should inherit from a config ###
-    inherit_from = cfg_special.get('inherit_from')
+    inherit_from = cfg_special.get("inherit_from")
 
     ### if yes, load this config first as default. Otherwise, use the default_path ###
     if inherit_from is not None:
         # inherit_cfg_path = "/".join(path.split("/")[:-3]) + "/" + inherit_from
         cfg = load_config(inherit_from, default_path)
     elif default_path is not None:
-        with open(default_path, 'r') as f:
+        with open(default_path, "r") as f:
             cfg = yaml.full_load(f)
     else:
         cfg = dict()
@@ -61,7 +60,7 @@ def load_config(path: str, default_path=None) -> Dict:
 
 
 def update_recursive(dict1: Dict, dict2: Dict) -> None:
-    """ Update two config dictionaries recursively.
+    """Update two config dictionaries recursively.
 
     Args:
         dict1 (dict): first dictionary to be updated.

@@ -22,7 +22,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 
-
 import argparse
 from glob import glob
 import numpy as np
@@ -33,11 +32,11 @@ import time
 
 sys.path.append(os.getcwd())
 from src.visualization.o3d_utils import (
-    create_camera_frustum, 
-    save_camera_parameters, 
+    create_camera_frustum,
+    save_camera_parameters,
     # load_camera_parameters_from_json,
-    create_dashed_line
-    )
+    create_dashed_line,
+)
 
 import open3d.visualization.webrtc_server as webrtc_server
 
@@ -47,19 +46,23 @@ def argument_parsing() -> argparse.Namespace:
 
     Returns:
         args: arguments
-        
+
     """
-    parser = argparse.ArgumentParser(
-            description="Arguments to visualize trajectory."
-        )
-    parser.add_argument("--mesh_file", type=str, default="", 
-                        help="mesh file")
-    parser.add_argument("--traj_file", type=str, default="",
-                        help="trajectory pose dir")
-    parser.add_argument("--out_dir", type=str, default=None, 
-                        help="output directory to save rendered image")
-    parser.add_argument("--with_interact", type=int, default=1,
-                        help="with interaction for visualization")
+    parser = argparse.ArgumentParser(description="Arguments to visualize trajectory.")
+    parser.add_argument("--mesh_file", type=str, default="", help="mesh file")
+    parser.add_argument("--traj_file", type=str, default="", help="trajectory pose dir")
+    parser.add_argument(
+        "--out_dir",
+        type=str,
+        default=None,
+        help="output directory to save rendered image",
+    )
+    parser.add_argument(
+        "--with_interact",
+        type=int,
+        default=1,
+        help="with interaction for visualization",
+    )
     args = parser.parse_args()
     return args
 
@@ -68,17 +71,19 @@ def convert_rel2world(start_c2w_rel, rel_c2w_slam):
     c2w_slam_w = start_c2w_rel @ rel_c2w_slam
     return c2w_slam_w
 
+
 def load_cam_traj(scene_path):
     params = dict(np.load(scene_path, allow_pickle=True))
     cam_traj = {}
-    cam_traj['w2cs'] = params.pop('gt_w2c_all_frames')
-    cam_traj['intrinsic'] = params.pop('intrinsics')
-    cam_traj['height'] = params.pop('org_height')
-    cam_traj['width'] = params.pop('org_width')
-    return cam_traj # 80,4,4
+    cam_traj["w2cs"] = params.pop("gt_w2c_all_frames")
+    cam_traj["intrinsic"] = params.pop("intrinsics")
+    cam_traj["height"] = params.pop("org_height")
+    cam_traj["width"] = params.pop("org_width")
+    return cam_traj  # 80,4,4
+
 
 def load_Replica_pose(line: str):
-    """ load Replica pose from trajectory file
+    """load Replica pose from trajectory file
 
     Args:
         line (str): pose data as txt line. Format: camera-to-world, RUB
@@ -89,8 +94,11 @@ def load_Replica_pose(line: str):
     c2w = np.array(list(map(float, line.split()))).reshape(4, 4)
     return c2w
 
-def load_camera_parameters_from_data(cam_traj: dict) -> o3d.camera.PinholeCameraParameters:
-    """ load camera parameters from json
+
+def load_camera_parameters_from_data(
+    cam_traj: dict,
+) -> o3d.camera.PinholeCameraParameters:
+    """load camera parameters from json
 
     Args:
         json_file (str): camera parameter json file
@@ -105,7 +113,7 @@ def load_camera_parameters_from_data(cam_traj: dict) -> o3d.camera.PinholeCamera
         cam_traj["intrinsic"][0, 0],  # fx
         cam_traj["intrinsic"][1, 1],  # fy
         cam_traj["intrinsic"][0, 2],  # cx
-        cam_traj["intrinsic"][1, 2]  # cy
+        cam_traj["intrinsic"][1, 2],  # cy
     )
 
     # Load extrinsic parameters
@@ -121,8 +129,8 @@ def load_camera_parameters_from_data(cam_traj: dict) -> o3d.camera.PinholeCamera
 
     return cam_param
 
-if __name__ == '__main__':
 
+if __name__ == "__main__":
     ### arguments ###
     args = argument_parsing()
 
@@ -130,20 +138,24 @@ if __name__ == '__main__':
     HOME = "/mnt/Data2/"
     PROJ_DIR = f"{HOME}/liyan/ActiveGAMER"
     DATASET = "Replica"
-    RESULT_DIR =f'{PROJ_DIR}/results'
+    RESULT_DIR = f"{PROJ_DIR}/results"
     GT_DATA_DIR = f"{HOME}/slam_datasets/{DATASET}"
 
     scene = "office4"
     seed = 0
     method = "ActiveLang"
     slam = "splatam"
-    args.mesh_file =f'{GT_DATA_DIR}/{scene}_mesh.ply'
-    args.traj_file =f'{RESULT_DIR}/{DATASET}/{scene}/{method}/run_0/{slam}/final/params.npz'
-    args.out_dir =f'{RESULT_DIR}/{DATASET}/{scene}/{method}/run_0/visualization/planning_path/'
+    args.mesh_file = f"{GT_DATA_DIR}/{scene}_mesh.ply"
+    args.traj_file = (
+        f"{RESULT_DIR}/{DATASET}/{scene}/{method}/run_0/{slam}/final/params.npz"
+    )
+    args.out_dir = (
+        f"{RESULT_DIR}/{DATASET}/{scene}/{method}/run_0/visualization/planning_path/"
+    )
 
-    traj_txt=f'{GT_DATA_DIR}/{scene}/traj.txt'
+    traj_txt = f"{GT_DATA_DIR}/{scene}/traj.txt"
 
-    with open(traj_txt, 'r') as f:
+    with open(traj_txt, "r") as f:
         lines = f.readlines()
         poses = [load_Replica_pose(line) for line in lines]
 
@@ -160,20 +172,20 @@ if __name__ == '__main__':
     filtered_vertices = vertices[mask]
     filtered_colors = np.asarray(mesh.colors)[mask]
     filtered_mesh = o3d.geometry.PointCloud()
-    filtered_mesh.points = points=o3d.utility.Vector3dVector(filtered_vertices)
-    filtered_mesh.colors=o3d.utility.Vector3dVector(filtered_colors)
+    filtered_mesh.points = points = o3d.utility.Vector3dVector(filtered_vertices)
+    filtered_mesh.colors = o3d.utility.Vector3dVector(filtered_colors)
 
     # mesh.transform(transform)
     # camera_trajectory = np.load(traj_file)
     camera_trajectory = load_cam_traj(args.traj_file)
 
-    ip = '127.0.0.1'
-    port = '5001'
-    os.environ['EGL_PLATFORM'] = 'surfaceless'
-    os.environ['OPEN3D_CPU_RENDERING'] = 'true'
-    os.environ['LIBGL_ALWAYS_SOFTWARE'] = 'true'
-    os.environ['WEBRTC_IP'] = ip
-    os.environ['WEBRTC_PORT'] = port
+    ip = "127.0.0.1"
+    port = "5001"
+    os.environ["EGL_PLATFORM"] = "surfaceless"
+    os.environ["OPEN3D_CPU_RENDERING"] = "true"
+    os.environ["LIBGL_ALWAYS_SOFTWARE"] = "true"
+    os.environ["WEBRTC_IP"] = ip
+    os.environ["WEBRTC_PORT"] = port
     webrtc_server.enable_webrtc()
 
     ### initialize window ###
@@ -195,10 +207,10 @@ if __name__ == '__main__':
 
     ### Add trajecotry ###
     skip_step = 5
-    w2c_subset = camera_trajectory['w2cs'][::skip_step]
+    w2c_subset = camera_trajectory["w2cs"][::skip_step]
     # cam_traj_subset = camera_trajectory[::skip_step]
     # cam_traj_subset = camera_trajectory[:10]
-    c2ws = [convert_rel2world(transform,np.linalg.inv(w2c)) for w2c in w2c_subset]
+    c2ws = [convert_rel2world(transform, np.linalg.inv(w2c)) for w2c in w2c_subset]
     w2c_subset = [np.linalg.inv(c2w) for c2w in c2ws]
 
     for step, w2c in enumerate(w2c_subset):
@@ -206,9 +218,7 @@ if __name__ == '__main__':
         ### Add Camera ###
         ##################################################
         pose = np.linalg.inv(w2c)
-        intrinsic = np.array([[300, 0, 300],
-                            [0, 300, 300],
-                            [0, 0, 1]])
+        intrinsic = np.array([[300, 0, 300], [0, 300, 300], [0, 0, 1]])
         ### Create camera frustum ###
         if step == 0:
             color = [1, 0, 0]
@@ -216,7 +226,9 @@ if __name__ == '__main__':
             color = [0, 0, 1]
         else:
             color = [0, 1, 0]
-        camera_frustum = create_camera_frustum(color=color, extrinsic=pose, intrinsic=intrinsic, scale=1)
+        camera_frustum = create_camera_frustum(
+            color=color, extrinsic=pose, intrinsic=intrinsic, scale=1
+        )
         # webrtc_server.register_object(f"camera_{step}", camera_frustum)
         o3d.visualization.draw(camera_frustum)
 
@@ -226,7 +238,9 @@ if __name__ == '__main__':
         ### Add line
         ##################################################
         if step > 0:
-            points = [np.linalg.inv(w2c)[:3, 3] for w2c in w2c_subset[step-1:step+1]]
+            points = [
+                np.linalg.inv(w2c)[:3, 3] for w2c in w2c_subset[step - 1 : step + 1]
+            ]
             line_set = create_dashed_line(points, color=[0, 0, 0])
             # vis.add_geometry(line_set)
             # webrtc_server.register_object(f"line_{step}", line_set)

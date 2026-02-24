@@ -51,25 +51,24 @@ def find_first_occurance(indexing_tensor: torch.Tensor) -> torch.Tensor:
     tensor([0, 1, 2])
     """
     start = time()
-    unique, idx, counts = torch.unique(indexing_tensor, sorted=True, return_inverse=True, return_counts=True)
+    unique, idx, counts = torch.unique(
+        indexing_tensor, sorted=True, return_inverse=True, return_counts=True
+    )
     # breakpoint()
     # print("---- unique: ", (time()-start)*1000)
     _, ind_sorted = torch.sort(idx, stable=True)
     cum_sum = counts.cumsum(0)
-    cum_sum = torch.cat((cum_sum[0:1] * 0., cum_sum[:-1])).long()
+    cum_sum = torch.cat((cum_sum[0:1] * 0.0, cum_sum[:-1])).long()
     first_indicies = ind_sorted[cum_sum]
     return first_indicies
 
 
 class BackwardWarping(nn.Module):
-    """ Layer to forward (depth) warping a perspective image
-    """
+    """Layer to forward (depth) warping a perspective image"""
 
-    def __init__(self,
-                 out_hw: Tuple[int, int],
-                 device: torch.device,
-                 K: torch.Tensor
-                 ) -> None:
+    def __init__(
+        self, out_hw: Tuple[int, int], device: torch.device, K: torch.Tensor
+    ) -> None:
         """
         Args:
             out_hw (Tuple[int, int]): output image size
@@ -188,12 +187,13 @@ class BackwardWarping(nn.Module):
 
     # ## Backward warp depth map D2 (refer view) to candidate view (D1), X(x,y,z) is world coordinate, u(u,v) is 2d coordinate
 
-    def forward(self,
-                img_tgt: torch.Tensor, # D
-                depth_tgt: torch.Tensor,
-                depth_ref: torch.Tensor,
-                T: torch.Tensor,
-                ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def forward(
+        self,
+        img_tgt: torch.Tensor,  # D
+        depth_tgt: torch.Tensor,
+        depth_ref: torch.Tensor,
+        T: torch.Tensor,
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Args:
             img (torch.Tensor, [N,C,H,W]: color map
@@ -210,9 +210,13 @@ class BackwardWarping(nn.Module):
 
         ### reprojection ###
         pts3d = self.backproj(depth_ref, self.inv_K)  # [N,4,(HxW)] (x,y,z,1) X1@1
-        pts3d_nv = self.transform3d(pts3d, T)   # X1@2 depth1@2 = pts3d_nv[:,2]
-        nv_grid = self.projection(pts3d_nv, self.K, normalized=True)  # [N,H,W,2] u1@2 = K2 \dot X1@2
-        transformed_distance = pts3d_nv[:, 2:3].view(b, 1, h, w)  # N, 1, H, W   depth1@2 = pts3d_nv[:,2]
+        pts3d_nv = self.transform3d(pts3d, T)  # X1@2 depth1@2 = pts3d_nv[:,2]
+        nv_grid = self.projection(
+            pts3d_nv, self.K, normalized=True
+        )  # [N,H,W,2] u1@2 = K2 \dot X1@2
+        transformed_distance = pts3d_nv[:, 2:3].view(
+            b, 1, h, w
+        )  # N, 1, H, W   depth1@2 = pts3d_nv[:,2]
 
         ### backward warping ###
         # nv_img, nv_depth_warp, nv_mask = self.backward_warping(img_tgt, depth_tgt, nv_grid)
@@ -227,7 +231,6 @@ class BackwardWarping(nn.Module):
         # pt3d_trans = self.backproj(nv_depth_warp, self.inv_K)
         # pt3d_ref =  self.transform3d(pts3d, torch.linalg.inv(T))
         # nv_depth = pt3d_ref[:,2].view(-1, 1, h,w)
-
 
         # return nv_img.float(), nv_depth_warp.float(), nv_mask.float(), transformed_distance.float()
         return nv_img, nv_depth, transformed_distance
@@ -258,11 +261,7 @@ if __name__ == "__main__":
     K[1, 2] = out_hw[0] / 2
     K = K.to(device).float()
 
-    backward_warp = BackwardWarping(
-        out_hw=out_hw,
-        device=device,
-        K=K
-    )
+    backward_warp = BackwardWarping(out_hw=out_hw, device=device, K=K)
 
     ##################################################
     ### Load Data
@@ -308,9 +307,7 @@ if __name__ == "__main__":
     start = time()
     # nv_img, nv_depth, nv_mask, depth_trans = backward_warp(img, depth_tgt, depth, ref2tgt)
     nv_img, nv_depth, depth_trans = backward_warp(img_tgt, depth_tgt, depth, ref2tgt)
-    print("==> BackwardWarp: {}ms".format(
-        (time() - start) * 1000
-    ))
+    print("==> BackwardWarp: {}ms".format((time() - start) * 1000))
     nv_img_np = nv_img[0].permute(1, 2, 0).detach().cpu().numpy().astype(np.uint8)
     # nv_mask_np = np.clip(nv_mask[0, 0].detach().cpu().numpy() * 255, 0, 255).astype(np.uint8)
     nv_depth_np = nv_depth[0, 0].detach().cpu().numpy().astype(np.float32)

@@ -22,21 +22,17 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 
-
 import torch
 import torch.nn as nn
 
 
 class Transformation3D(nn.Module):
-    """Layer which transform 3D points
-    """
+    """Layer which transform 3D points"""
+
     def __init__(self):
         super(Transformation3D, self).__init__()
 
-    def forward(self, 
-                points: torch.Tensor, 
-                T: torch.Tensor
-                ) -> torch.Tensor:
+    def forward(self, points: torch.Tensor, T: torch.Tensor) -> torch.Tensor:
         """
         Args:
             points (torch.Tensor, [N,4,(HxW)]): 3D points in homogeneous coordinates

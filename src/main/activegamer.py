@@ -25,6 +25,7 @@ SOFTWARE.
 import numpy as np
 import os
 import sys
+
 sys.path.append(os.getcwd())
 from tensorboardX import SummaryWriter
 import torch
@@ -45,14 +46,15 @@ import numpy
 
 
 def map_object_id_to_semlabel(object_ids, id2label):
-    '''
+    """
 
     :param object_ids: torch.tensor (H,W) # output from habitat-sim, including class id of each pixel
     :return: semantic labels: torch.tensor (H,W) # output from habitat-sim, including class id of each pixel
-    '''
+    """
     id2label = torch.tensor(id2label)
     sem_labels = id2label[object_ids.long()]
     return sem_labels
+
 
 def generate_random_colormap(num_classes):
     """
@@ -65,7 +67,10 @@ def generate_random_colormap(num_classes):
         dict: A dictionary mapping class indices to random RGB colors.
     """
     random.seed(42)  # Set seed for reproducibility
-    colormap = {i: (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255)) for i in range(num_classes)}
+    colormap = {
+        i: (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
+        for i in range(num_classes)
+    }
     return colormap
 
 
@@ -112,7 +117,7 @@ if __name__ == "__main__":
     args = argument_parsing()
     info_printer("Loading configuration...", 0, "Initialization")
     main_cfg = load_cfg(args)
-    main_cfg.dump(os.path.join(main_cfg.dirs.result_dir, 'main_cfg.json'))
+    main_cfg.dump(os.path.join(main_cfg.dirs.result_dir, "main_cfg.json"))
     info_printer.update_total_step(main_cfg.general.num_iter)
     info_printer.update_scene(main_cfg.general.dataset + " - " + main_cfg.general.scene)
     selected_scene = main_cfg.general.scene
@@ -128,30 +133,30 @@ if __name__ == "__main__":
     ##################################################
     log_savedir = os.path.join(main_cfg.dirs.result_dir, "logger")
     os.makedirs(log_savedir, exist_ok=True)
-    logger = SummaryWriter(f'{log_savedir}')
+    logger = SummaryWriter(f"{log_savedir}")
 
     ##################################################
     ##########  load in id2label
     ##################################################
-    if main_cfg.general.dataset == 'Replica':
+    if main_cfg.general.dataset == "Replica":
         ori_dir = f"./data/replica_v1/{main_cfg.general.scene[:-1]}_{main_cfg.general.scene[-1]}/habitat/"
-        ori_semantic_info_file = os.path.join(ori_dir, 'info_semantic.json')
-        with open(ori_semantic_info_file, 'r') as file:
-            scene_id2label = json.load(file)['id_to_label']
-        img_save_dir = f'./data/replica_sim_finetune/{selected_scene}/results_habitat/'
+        ori_semantic_info_file = os.path.join(ori_dir, "info_semantic.json")
+        with open(ori_semantic_info_file, "r") as file:
+            scene_id2label = json.load(file)["id_to_label"]
+        img_save_dir = f"./data/replica_sim_finetune/{selected_scene}/results_habitat/"
         os.makedirs(img_save_dir, exist_ok=True)
-        os.makedirs(f'{img_save_dir}/rgb', exist_ok=True)
-        os.makedirs(f'{img_save_dir}/semantic', exist_ok=True)
-    elif main_cfg.general.dataset == 'MP3D':
+        os.makedirs(f"{img_save_dir}/rgb", exist_ok=True)
+        os.makedirs(f"{img_save_dir}/semantic", exist_ok=True)
+    elif main_cfg.general.dataset == "MP3D":
         obj_to_cat_file = f"./configs/{main_cfg.general.dataset}/{main_cfg.general.scene}/instance_to_mpcat40.json"
         with open(obj_to_cat_file, "r") as f:
             instance_to_mpcat40 = json.load(f)
         instance_to_mpcat40 = {int(k): v for k, v in instance_to_mpcat40.items()}
-        img_save_dir = f'./data/mp3d_sim_finetune/{selected_scene}/results_habitat/'
+        img_save_dir = f"./data/mp3d_sim_finetune/{selected_scene}/results_habitat/"
         os.makedirs(img_save_dir, exist_ok=True)
-        os.makedirs(f'{img_save_dir}/rgb', exist_ok=True)
-        os.makedirs(f'{img_save_dir}/semantic', exist_ok=True)
-    
+        os.makedirs(f"{img_save_dir}/rgb", exist_ok=True)
+        os.makedirs(f"{img_save_dir}/semantic", exist_ok=True)
+
     ##################################################
     ### initialize simulator
     ##################################################
@@ -161,7 +166,7 @@ if __name__ == "__main__":
     ### initialize SLAM module
     ##################################################
     slam = init_SLAM_model(main_cfg, info_printer, logger)
-    map_iter_og = slam.config['mapping']['num_iters']
+    map_iter_og = slam.config["mapping"]["num_iters"]
 
     ##################################################
     ### initialize planning module
@@ -179,13 +184,15 @@ if __name__ == "__main__":
     ### Run ActiveLang
     ##################################################
     ## load initial pose and convert from RUB to RDF (splatam)) ##
-    c2w_slam = planner.load_init_pose() # RUB
+    c2w_slam = planner.load_init_pose()  # RUB
     c2w_slam[:3, 1] *= -1
-    c2w_slam[:3, 2] *= -1 # RDF
-    c2w_slam_init = c2w_slam.clone() # RDF
+    c2w_slam[:3, 2] *= -1  # RDF
+    c2w_slam_init = c2w_slam.clone()  # RDF
 
     ## initialize exploration map in slam ##
-    T_sim2slam = torch.inverse(c2w_slam_init) # RDF # transformation that takes sim-world points to slam-world-origin (i.e. first camera)
+    T_sim2slam = torch.inverse(
+        c2w_slam_init
+    )  # RDF # transformation that takes sim-world points to slam-world-origin (i.e. first camera)
     slam.init_exploration_map(T_sim2slam)
 
     planner.init_data(T_sim2slam)
@@ -196,7 +203,7 @@ if __name__ == "__main__":
     planner.timer = timer
 
     for i in range(main_cfg.general.num_iter):
-    # for i in range(0, main_cfg.general.num_iter, 10):
+        # for i in range(0, main_cfg.general.num_iter, 10):
         ##################################################
         ### update module infomation (e.g. step)
         ##################################################
@@ -206,31 +213,31 @@ if __name__ == "__main__":
         ### load pose and transform pose
         ##################################################
         if main_cfg.planner.method == "predefined_traj":
-            c2w_slam = planner.update_pose(c2w_slam, i).to(c2w_slam.device) # RUB
-            c2w_sim = c2w_slam.cpu().numpy().copy() # RUB
+            c2w_slam = planner.update_pose(c2w_slam, i).to(c2w_slam.device)  # RUB
+            c2w_sim = c2w_slam.cpu().numpy().copy()  # RUB
             ## convert back to RDF (splatam) ##
-            c2w_slam[:3, 1] *= -1 
+            c2w_slam[:3, 1] *= -1
             c2w_slam[:3, 2] *= -1
         elif main_cfg.planner.method in ["active_lang", "active_gs"]:
             ## convert back to RUB (habitat) ##
-            c2w_sim = c2w_slam.cpu().numpy().copy() # RDF
-            c2w_sim[:3, 1] *= -1 
-            c2w_sim[:3, 2] *= -1 # RUB
+            c2w_sim = c2w_slam.cpu().numpy().copy()  # RDF
+            c2w_sim[:3, 1] *= -1
+            c2w_sim[:3, 2] *= -1  # RUB
         else:
             raise NotImplementedError
 
         ## convert to relative pose (w.r.t first pose) ##
-        c2w_slam_rel = torch.inverse(c2w_slam_init) @ c2w_slam # RDF
-        
+        c2w_slam_rel = torch.inverse(c2w_slam_init) @ c2w_slam  # RDF
+
         ##################################################
         ### Simulation
         ##################################################
         timer.start("Simulation", "General")
-        sim_out = sim.simulate(c2w_sim,return_semantic=True)
+        sim_out = sim.simulate(c2w_sim, return_semantic=True)
         timer.end("Simulation")
-        color = sim_out['color']
-        depth = sim_out['depth']
-        seman = sim_out['seman']
+        color = sim_out["color"]
+        depth = sim_out["depth"]
+        seman = sim_out["seman"]
 
         out_color = color.clone()
         to_pil = transforms.ToPILImage()
@@ -239,23 +246,35 @@ if __name__ == "__main__":
 
         out_seman = seman.clone().to(torch.int64)
 
-        if main_cfg.general.dataset == 'Replica':
-            seman = map_object_id_to_semlabel(object_ids=out_seman, id2label=scene_id2label)
+        if main_cfg.general.dataset == "Replica":
+            seman = map_object_id_to_semlabel(
+                object_ids=out_seman, id2label=scene_id2label
+            )
             np.save(f"{img_save_dir}/semantic/semantic_map_{i:04d}.npy", seman.numpy())
             seman[seman < 0] = 0
-            semantic_mask_to_rgb(seman, f"{img_save_dir}/semantic/semantic_rgb_{i:04d}.png",num_classes=102)
-        elif main_cfg.general.dataset == 'MP3D':
+            semantic_mask_to_rgb(
+                seman,
+                f"{img_save_dir}/semantic/semantic_rgb_{i:04d}.png",
+                num_classes=102,
+            )
+        elif main_cfg.general.dataset == "MP3D":
             vectorized = np.vectorize(lambda x: instance_to_mpcat40.get(x, 0))
             mpcat40_map = vectorized(out_seman.long().cpu().numpy())
             np.save(f"{img_save_dir}/semantic/semantic_map_{i:04d}.npy", mpcat40_map)
-            semantic_mask_to_rgb(mpcat40_map, f"{img_save_dir}/semantic/semantic_rgb_{i:04d}.png",num_classes=41)
+            semantic_mask_to_rgb(
+                mpcat40_map,
+                f"{img_save_dir}/semantic/semantic_rgb_{i:04d}.png",
+                num_classes=41,
+            )
 
         if planner.planning_state in ["refinement", "post_refinement"]:
             break
 
         if main_cfg.visualizer.vis_rgbd:
-            visualizer.visualize_rgbd(color, depth, main_cfg.visualizer.vis_rgbd_max_depth)
-        
+            visualizer.visualize_rgbd(
+                color, depth, main_cfg.visualizer.vis_rgbd_max_depth
+            )
+
         ##################################################
         ### save data for comprehensive visualization
         ##################################################
@@ -266,19 +285,38 @@ if __name__ == "__main__":
         ### Mapping optimization
         ##################################################
         ### get timer state ###
-        planner_state = f"{planner.planning_state}_{planner.exploration_stage}" if planner.planning_state == "exploration" else planner.planning_state
+        planner_state = (
+            f"{planner.planning_state}_{planner.exploration_stage}"
+            if planner.planning_state == "exploration"
+            else planner.planning_state
+        )
         slam_state = f"SLAM_{planner_state}"
         timer.start(slam_state, "General")
 
         ### slam options ###
-        force_map_update = planner.state == "planning" or planner.planning_state == "post_refinement"
+        force_map_update = (
+            planner.state == "planning" or planner.planning_state == "post_refinement"
+        )
         dont_add_kf = planner.state == "planning"
-        only_use_global_keyframe = main_cfg.slam.use_global_keyframe and planner.planning_state == "post_refinement"
-        slam.seperate_densification_res = not(planner.planning_state == "post_refinement")
+        only_use_global_keyframe = (
+            main_cfg.slam.use_global_keyframe
+            and planner.planning_state == "post_refinement"
+        )
+        slam.seperate_densification_res = not (
+            planner.planning_state == "post_refinement"
+        )
 
-        slam.online_recon_step(i, color, depth, c2w_slam_rel, force_map_update, dont_add_kf, only_use_global_keyframe)
+        slam.online_recon_step(
+            i,
+            color,
+            depth,
+            c2w_slam_rel,
+            force_map_update,
+            dont_add_kf,
+            only_use_global_keyframe,
+        )
         timer.end(slam_state)
-        
+
         ##################################################
         ### Active Planning
         ##################################################
@@ -288,26 +326,26 @@ if __name__ == "__main__":
                 planner.add_refine_pool_cand(slam.keyframe_list)
 
             ### get timer state ###
-            planner_state = f"{planner.planning_state}_{planner.exploration_stage}" if planner.planning_state == "exploration" else planner.planning_state
+            planner_state = (
+                f"{planner.planning_state}_{planner.exploration_stage}"
+                if planner.planning_state == "exploration"
+                else planner.planning_state
+            )
             timer.start(planner_state, "General")
 
-            c2w_slam_rel = planner.main(
-                c2w_slam_rel, 
-                slam)
+            c2w_slam_rel = planner.main(c2w_slam_rel, slam)
             c2w_slam = c2w_slam_init @ c2w_slam_rel
 
             timer.end(planner_state)
 
             if planner.planning_state in ["refinement", "post_refinement"]:
                 if force_map_update:
-                    slam.config['mapping']['num_iters'] = main_cfg.slam.refine_map_iter
+                    slam.config["mapping"]["num_iters"] = main_cfg.slam.refine_map_iter
                 else:
-                    slam.config['mapping']['num_iters'] = map_iter_og
-                    
+                    slam.config["mapping"]["num_iters"] = map_iter_og
+
             elif planner.planning_state == "done":
                 break
-
-
 
             ### store data for visualization ###
             # if planner.state == "planning" and "exploration" in planner.planning_state:
@@ -320,10 +358,9 @@ if __name__ == "__main__":
             #         igs.append(val['ig'].detach().cpu().numpy())
             #     igs = np.asarray(igs)
             #     eval_dir_suffix = f"step_{i:04}"
-            #     eval_dir = slam.eval_dir + "_" + eval_dir_suffix 
+            #     eval_dir = slam.eval_dir + "_" + eval_dir_suffix
             #     os.makedirs(eval_dir, exist_ok=True)
             #     np.save(os.path.join(eval_dir, "information.npy"), igs)
-
 
     ##################################################
     ### Save Final Mesh and Checkpoint
@@ -333,6 +370,6 @@ if __name__ == "__main__":
     # ##################################################
     # ### Runtime Analysis
     # ##################################################
-    timer.time_analysis(method='mean')
+    timer.time_analysis(method="mean")
     # print("per-iter SLAM_exploration_0: ", np.mean(timer.timers['SLAM_exploration_0']['duration'][4:][::5]))
     # print("per-iter SLAM_exploration_1: ", np.mean(timer.timers['SLAM_exploration_1']['duration'][3:][::5]))

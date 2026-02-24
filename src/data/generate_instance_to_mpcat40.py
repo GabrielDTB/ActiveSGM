@@ -21,12 +21,12 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
+
 import json
 import pandas as pd
 
 if __name__ == "__main__":
-
-    category_mapping_file = './configs/MP3D/category_mapping.tsv'
+    category_mapping_file = "./configs/MP3D/category_mapping.tsv"
 
     # Load category mapping file
     mapping_df = pd.read_csv(category_mapping_file, sep="\t")
@@ -37,10 +37,15 @@ if __name__ == "__main__":
     # label_index → mpcat40
     label_to_mpcat40 = mapping_df.set_index("index")["mpcat40index"].to_dict()
 
-    MP3D_scenes = ["GdvgFV5R1Z5","gZ6f7yhEvPG","HxpKQynjfin","pLe4wQe7qrG","YmJkqBEsHnH"]
+    MP3D_scenes = [
+        "GdvgFV5R1Z5",
+        "gZ6f7yhEvPG",
+        "HxpKQynjfin",
+        "pLe4wQe7qrG",
+        "YmJkqBEsHnH",
+    ]
     for scene in MP3D_scenes:
-
-        scene_seg_file = f'./data/MP3D/v1/scans/{scene}/{scene}/house_segmentations/{scene}.semseg.json'
+        scene_seg_file = f"./data/MP3D/v1/scans/{scene}/{scene}/house_segmentations/{scene}.semseg.json"
         # Load semseg JSON
         with open(scene_seg_file, "r") as f:
             semseg_data = json.load(f)
@@ -52,6 +57,6 @@ if __name__ == "__main__":
         }
 
         # Save to a new JSON file
-        instance_to_mpcat40_file = f'./configs/MP3D/{scene}/instance_to_mpcat40.json'
+        instance_to_mpcat40_file = f"./configs/MP3D/{scene}/instance_to_mpcat40.json"
         with open(instance_to_mpcat40_file, "w") as f:
             json.dump(instance_to_mpcat40, f, indent=2)

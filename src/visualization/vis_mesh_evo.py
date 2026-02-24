@@ -22,7 +22,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 
-
 import argparse
 import numpy as np
 import open3d as o3d
@@ -32,11 +31,11 @@ import time
 
 sys.path.append(os.getcwd())
 from src.visualization.o3d_utils import (
-    create_camera_frustum, 
-    save_camera_parameters, 
-    load_camera_parameters_from_json, 
-    create_dashed_line
-    )
+    create_camera_frustum,
+    save_camera_parameters,
+    load_camera_parameters_from_json,
+    create_dashed_line,
+)
 
 
 def argument_parsing() -> argparse.Namespace:
@@ -44,19 +43,26 @@ def argument_parsing() -> argparse.Namespace:
 
     Returns:
         args: arguments
-        
+
     """
     parser = argparse.ArgumentParser(
-            description="Arguments to visualize mesh over time."
-        )
-    parser.add_argument("--mesh_dir", type=str, default="", 
-                        help="mesh directory with .ply files")
-    parser.add_argument("--traj_file", type=str, default="pose_2000_final.pt.npy", 
-                        help="trajectory pose file")
-    parser.add_argument("--cam_json", type=str, default=None, 
-                        help="trajectory pose file")
+        description="Arguments to visualize mesh over time."
+    )
+    parser.add_argument(
+        "--mesh_dir", type=str, default="", help="mesh directory with .ply files"
+    )
+    parser.add_argument(
+        "--traj_file",
+        type=str,
+        default="pose_2000_final.pt.npy",
+        help="trajectory pose file",
+    )
+    parser.add_argument(
+        "--cam_json", type=str, default=None, help="trajectory pose file"
+    )
     args = parser.parse_args()
     return args
+
 
 ### arguments ###
 args = argument_parsing()
@@ -82,11 +88,11 @@ cam_traj_subset = camera_trajectory
 
 mesh = None
 for step, pose in enumerate(cam_traj_subset):
-    if step < len(cam_traj_subset)-1:
+    if step < len(cam_traj_subset) - 1:
         last_mesh = mesh
         vis.clear_geometries()
 
-    if step % skip_step != 0 and step != len(cam_traj_subset)-1:
+    if step % skip_step != 0 and step != len(cam_traj_subset) - 1:
         continue
 
     ##################################################
@@ -103,9 +109,7 @@ for step, pose in enumerate(cam_traj_subset):
     ##################################################
     ### Add Camera ###
     ##################################################
-    intrinsic = np.array([[300, 0, 300],
-                        [0, 300, 300],
-                        [0, 0, 1]])
+    intrinsic = np.array([[300, 0, 300], [0, 300, 300], [0, 0, 1]])
     ### Create camera frustum ###
     if step == 0:
         color = [1, 0, 0]
@@ -113,14 +117,16 @@ for step, pose in enumerate(cam_traj_subset):
         color = [0, 0, 1]
     else:
         color = [0, 0, 0]
-    camera_frustum = create_camera_frustum(color=color, extrinsic=pose, intrinsic=intrinsic, scale=1)
+    camera_frustum = create_camera_frustum(
+        color=color, extrinsic=pose, intrinsic=intrinsic, scale=1
+    )
     vis.add_geometry(camera_frustum)
 
     ##################################################
     ### Add line
     ##################################################
     if step > 0:
-        points = [pose[:3, 3] for pose in cam_traj_subset[step-1:step+1]]
+        points = [pose[:3, 3] for pose in cam_traj_subset[step - 1 : step + 1]]
         line_set = create_dashed_line(points, color=[0, 0, 0])
         vis.add_geometry(line_set)
 
@@ -128,7 +134,9 @@ for step, pose in enumerate(cam_traj_subset):
     ### set camera view
     ##################################################
     if cam_json is not None:
-        view_control.convert_from_pinhole_camera_parameters(vis_cam_param, allow_arbitrary=True)
+        view_control.convert_from_pinhole_camera_parameters(
+            vis_cam_param, allow_arbitrary=True
+        )
 
     ##################################################
     ### update visualizer

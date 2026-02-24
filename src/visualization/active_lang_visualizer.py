@@ -22,7 +22,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 
-
 import cv2
 import mmengine
 import numpy as np
@@ -41,50 +40,64 @@ from third_parties.coslam.utils import colormap_image
 
 
 class ActiveLangVisualizer(Visualizer):
-    def __init__(self, 
-                 main_cfg    : mmengine.Config,
-                 info_printer: InfoPrinter
-                 ) -> None:
+    def __init__(self, main_cfg: mmengine.Config, info_printer: InfoPrinter) -> None:
         """
         Args:
             main_cfg (mmengine.Config): Configuration
             info_printer (InfoPrinter): information printer
-    
+
         Attributes:
             main_cfg (mmengine.Config): configurations
             vis_cfg (mmengine.Config) : visualizer model configurations
             info_printer (InfoPrinter): information printer
-            
+
         """
         super(ActiveLangVisualizer, self).__init__(main_cfg, info_printer)
 
-        keys = ['rgbd', 'pose', 'planning_path', 'lookat_tgts', 'state', 'information_gain', 'rendered_rgbd']
+        keys = [
+            "rgbd",
+            "pose",
+            "planning_path",
+            "lookat_tgts",
+            "state",
+            "information_gain",
+            "rendered_rgbd",
+        ]
         ### create directory ###
         for key in keys:
             if self.vis_cfg.get(f"save_{key}", False):
-                vis_dir = os.path.join(self.main_cfg.dirs.result_dir, "visualization", key)
+                vis_dir = os.path.join(
+                    self.main_cfg.dirs.result_dir, "visualization", key
+                )
                 os.makedirs(vis_dir, exist_ok=True)
 
         ### write remark ###
-        with open(os.path.join(self.main_cfg.dirs.result_dir, "visualization", "README.md"), 'w') as f:
+        with open(
+            os.path.join(self.main_cfg.dirs.result_dir, "visualization", "README.md"),
+            "w",
+        ) as f:
             f.writelines("rgbd: GT RGB-D visualization\n")
             f.writelines("render_rgbd: render RGB-D visualization\n")
             f.writelines("poses: (np.ndarray, [4,4]). Camera-to-world. RUB system. \n")
-            f.writelines("planning_path: (np.ndarray, [N,4,4]), each element is a planning pose \n")
-            f.writelines("lookat_tgts: (np.ndarray, [N,3]), uncertaint target observation locations to lookat.  \n")
+            f.writelines(
+                "planning_path: (np.ndarray, [N,4,4]), each element is a planning pose \n"
+            )
+            f.writelines(
+                "lookat_tgts: (np.ndarray, [N,3]), uncertaint target observation locations to lookat.  \n"
+            )
             f.writelines("state: (str), planner state \n")
-            
 
-    def main(self,
-             slam           : Splatam,
-             planner        : ActiveLangPlanner,
-             color          : torch.Tensor,
-             depth          : torch.Tensor,
-             im              :torch.Tensor,
-             rastered_depth  : torch.Tensor,
-             pose            : torch.Tensor,
-             ) -> None:
-        """ save data for visualization purpose
+    def main(
+        self,
+        slam: Splatam,
+        planner: ActiveLangPlanner,
+        color: torch.Tensor,
+        depth: torch.Tensor,
+        im: torch.Tensor,
+        rastered_depth: torch.Tensor,
+        pose: torch.Tensor,
+    ) -> None:
+        """save data for visualization purpose
 
         Args:
             slam           : SLAM module
@@ -103,23 +116,33 @@ class ActiveLangVisualizer(Visualizer):
         """
         ### GT RGB-D ###
         if self.vis_cfg.save_rgbd:
-            self.info_printer("Saving RGBD for visualization", self.step, self.__class__.__name__)
+            self.info_printer(
+                "Saving RGBD for visualization", self.step, self.__class__.__name__
+            )
             self.save_rgbd(color, depth)
 
         ### render RGB-D ###
         if self.vis_cfg.save_rendered_rgbd:
-            self.info_printer("Saving rendered RGBD for visualization", self.step, self.__class__.__name__)
-            self.save_render_rgbd(im,rastered_depth)
+            self.info_printer(
+                "Saving rendered RGBD for visualization",
+                self.step,
+                self.__class__.__name__,
+            )
+            self.save_render_rgbd(im, rastered_depth)
 
         ### pose ###
         if self.vis_cfg.save_pose:
-            self.info_printer("Saving pose for visualization", self.step, self.__class__.__name__)
+            self.info_printer(
+                "Saving pose for visualization", self.step, self.__class__.__name__
+            )
             pose_np = pose.detach().cpu().numpy()
             self.save_pose(pose_np)
 
         ### state ###
         if self.vis_cfg.save_state:
-            self.info_printer("Saving state for visualization", self.step, self.__class__.__name__)
+            self.info_printer(
+                "Saving state for visualization", self.step, self.__class__.__name__
+            )
             self.save_state(planner)
 
         # if self.step > 0:
@@ -133,54 +156,69 @@ class ActiveLangVisualizer(Visualizer):
         #         self.info_printer("Saving lookat_tgt for visualization", self.step, self.__class__.__name__)
         #         self.save_lookat_tgt(planner)
 
-           #### information gain ##########
-            # if self.vis_cfg.save_information_gain:
-            #     self.info_printer("Saving state for visualization", self.step, self.__class__.__name__)
-            #     self.save_igs(planner)
+        #### information gain ##########
+        # if self.vis_cfg.save_information_gain:
+        #     self.info_printer("Saving state for visualization", self.step, self.__class__.__name__)
+        #     self.save_igs(planner)
 
-    def save_rgbd(self, 
-                  color: torch.Tensor, 
-                  depth: torch.Tensor
-                  ) -> None:
+    def save_rgbd(self, color: torch.Tensor, depth: torch.Tensor) -> None:
         """save RGB-D visualization
-    
+
         Args:
             rgb (torch.Tensor, [H,W,3]): color map. Range: 0-1
             depth (torch.Tensor, [H,W]): depth map.
-    
+
         """
         rgbd_vis = self.visualize_rgbd(color, depth, return_vis=True)
-        filepath = os.path.join(self.main_cfg.dirs.result_dir, "visualization", "rgbd", f"{self.step:04}.png")
+        filepath = os.path.join(
+            self.main_cfg.dirs.result_dir,
+            "visualization",
+            "rgbd",
+            f"{self.step:04}.png",
+        )
         rgbd_vis = (rgbd_vis * 255).astype(np.uint8)
         cv2.imwrite(filepath, rgbd_vis)
 
-    def save_render_rgbd(self, im: torch.Tensor,
-                  rastered_depth: torch.Tensor):
+    def save_render_rgbd(self, im: torch.Tensor, rastered_depth: torch.Tensor):
         ### save params and render result ###
         rgbd_vis = self.visualize_rgbd(im, rastered_depth, return_vis=True)
-        filepath = os.path.join(self.main_cfg.dirs.result_dir, "visualization", "rendered_rgbd", f"{self.step:04}.png")
+        filepath = os.path.join(
+            self.main_cfg.dirs.result_dir,
+            "visualization",
+            "rendered_rgbd",
+            f"{self.step:04}.png",
+        )
         rgbd_vis = (rgbd_vis * 255).astype(np.uint8)
         cv2.imwrite(filepath, rgbd_vis)
 
-
     def save_pose(self, pose: np.ndarray) -> None:
-        """ save pose
-    
+        """save pose
+
         Args:
             pose: [4,4], current pose. Format: camera-to-world, RUB system
-    
+
         """
-        filepath = os.path.join(self.main_cfg.dirs.result_dir, "visualization", "pose", f"{self.step:04}.npy")
+        filepath = os.path.join(
+            self.main_cfg.dirs.result_dir,
+            "visualization",
+            "pose",
+            f"{self.step:04}.npy",
+        )
         np.save(filepath, pose)
-    
+
     def save_planning_path(self, planner: ActiveLangPlanner) -> None:
-        """ save planning path as np.ndarray (Nx3)
-    
+        """save planning path as np.ndarray (Nx3)
+
         Args:
             planner: Planner module
-    
+
         """
-        filepath = os.path.join(self.main_cfg.dirs.result_dir, "visualization", "planning_path", f"{self.step:04}.npy")
+        filepath = os.path.join(
+            self.main_cfg.dirs.result_dir,
+            "visualization",
+            "planning_path",
+            f"{self.step:04}.npy",
+        )
         if planner.path is not None:
             ### path (List) : each element is a pose [GoalNode, ..., CurrentNode] ###
             # path_locs = [planner.vox2loc(node._xyz_arr) for node in planner.path]
@@ -193,15 +231,20 @@ class ActiveLangVisualizer(Visualizer):
             np.save(filepath, path_locs)
         else:
             np.save(filepath, None)
-    
+
     def save_lookat_tgt(self, planner: ActiveLangPlanner) -> None:
-        """ save lookat targets (uncertain target observations) as np.ndarray (Nx3)
-    
+        """save lookat targets (uncertain target observations) as np.ndarray (Nx3)
+
         Args:
             planner: planner module
-    
+
         """
-        filepath = os.path.join(self.main_cfg.dirs.result_dir, "visualization", "lookat_tgts", f"{self.step:04}.npy")
+        filepath = os.path.join(
+            self.main_cfg.dirs.result_dir,
+            "visualization",
+            "lookat_tgts",
+            f"{self.step:04}.npy",
+        )
         if planner.lookat_tgts is not None:
             ### lookat_tgts (List)      : uncertaint target observation locations to lookat. each element is (np.ndarray, [3]) ###
             lookat_tgt_locs = np.asarray(planner.lookat_tgts)
@@ -210,26 +253,32 @@ class ActiveLangVisualizer(Visualizer):
             np.save(filepath, None)
 
     def save_state(self, planner: ActiveLangPlanner) -> None:
-        """ save planner state
-    
+        """save planner state
+
         Args:
             planner: planner module
-    
+
         """
-        filepath = os.path.join(self.main_cfg.dirs.result_dir, "visualization", "state", f"{self.step:04}.txt")
-        with open(filepath, 'w') as f:
+        filepath = os.path.join(
+            self.main_cfg.dirs.result_dir,
+            "visualization",
+            "state",
+            f"{self.step:04}.txt",
+        )
+        with open(filepath, "w") as f:
             f.writelines(f"{planner.state}")
 
-    def visualize_rgbd_w_render(self,
-                       rgb       : torch.Tensor,
-                       depth     : torch.Tensor,
-                       im        : torch.Tensor,
-                       rastered_depth: torch.Tensor,
-                       max_depth : float = 100.,
-                       vis_size  : int = 320,
-                       return_vis: bool = False
-                       ) -> Union[None, np.ndarray]:
-        """ visualiz RGB-D
+    def visualize_rgbd_w_render(
+        self,
+        rgb: torch.Tensor,
+        depth: torch.Tensor,
+        im: torch.Tensor,
+        rastered_depth: torch.Tensor,
+        max_depth: float = 100.0,
+        vis_size: int = 320,
+        return_vis: bool = False,
+    ) -> Union[None, np.ndarray]:
+        """visualiz RGB-D
         Args:
             rgb (torch.Tensor, [H,W,3]): color map. Range: 0-1
             depth (torch.Tensor, [H,W]): depth map.
@@ -248,7 +297,6 @@ class ActiveLangVisualizer(Visualizer):
         im = cv2.cvtColor(im.cpu().numpy(), cv2.COLOR_RGB2BGR)
         im = cv2.resize(im, (vis_size, vis_size))
 
-
         ### process Depth map ###
         depth = depth.unsqueeze(0)
         mask = (depth < max_depth) * 1.0
@@ -260,21 +308,21 @@ class ActiveLangVisualizer(Visualizer):
         mask = (rastered_depth < max_depth) * 1.0
         rastered_depth_colormap = colormap_image(rastered_depth, mask)
         rastered_depth_colormap = rastered_depth_colormap.permute(1, 2, 0).cpu().numpy()
-        rastered_depth_colormap = cv2.resize(rastered_depth_colormap, (vis_size, vis_size))
-
+        rastered_depth_colormap = cv2.resize(
+            rastered_depth_colormap, (vis_size, vis_size)
+        )
 
         ### display RGB-D ###
         image_gt = np.hstack((rgb, depth_colormap))
         image_render = np.hstack((im, rastered_depth_colormap))
-        image = np.vstack((image_gt,image_render))
-
+        image = np.vstack((image_gt, image_render))
 
         ### return visualization ###
         if return_vis:
             return image
         else:
-            cv2.namedWindow('RGB-D', cv2.WINDOW_AUTOSIZE)
-            cv2.imshow('RGB-D', image)
+            cv2.namedWindow("RGB-D", cv2.WINDOW_AUTOSIZE)
+            cv2.imshow("RGB-D", image)
             key = cv2.waitKey(1)
 
     # def save_igs(self, planner:ActiveLangPlanner):
@@ -286,10 +334,10 @@ class ActiveLangVisualizer(Visualizer):
     #         igs = np.asarray(igs)
     #         filepath = os.path.join(self.main_cfg.dirs.result_dir, "visualization", "information_gain", f"{self.step:04}.npy")
     #         np.save(filepath, igs)
-        
+
     # def save_color_mesh(self, slam: CoSLAM) -> None:
     #     """ save colored mesh
-    
+
     #     Args:
     #         slam: SLAM module
     #     """
@@ -298,10 +346,10 @@ class ActiveLangVisualizer(Visualizer):
     #         slam.save_mesh(self.step, voxel_size=self.vis_cfg.save_mesh_voxel_size, suffix='', mesh_savedir=mesh_dir)
     #     else:
     #         return
-    
+
     # def save_uncert_mesh(self, slam: CoSLAM) -> None:
     #     """ save uncertainty mesh
-    
+
     #     Args:
     #         slam: SLAM module
     #     """

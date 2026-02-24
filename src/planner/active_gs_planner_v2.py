@@ -40,7 +40,9 @@ from src.utils.general_utils import InfoPrinter
 from src.planner.rotation_planning import rotation_planning
 from src.planner.rrt_naruto import Node, is_collision_free
 from src.data.pose_loader import PoseLoader
-from src.planner.rotation_planner_v2 import smoothen_trajectory_v2 as smoothen_trajectory
+from src.planner.rotation_planner_v2 import (
+    smoothen_trajectory_v2 as smoothen_trajectory,
+)
 
 from third_parties.splatam.utils.slam_external import calc_psnr
 from third_parties.splatam.utils.common_utils import save_params
@@ -71,10 +73,11 @@ def remove_consecutive_duplicates(array_list: List[np.ndarray]) -> List[np.ndarr
 
 
 class ActiveGSPlannerv2(NarutoPlanner):
-    def __init__(self, 
-                 main_cfg    : mmengine.Config,
-                 info_printer: InfoPrinter,
-                 ) -> None:
+    def __init__(
+        self,
+        main_cfg: mmengine.Config,
+        info_printer: InfoPrinter,
+    ) -> None:
         """
         Args:
             main_cfg (mmengine.Config): Configuration
@@ -88,7 +91,7 @@ class ActiveGSPlannerv2(NarutoPlanner):
         """
         super(ActiveGSPlannerv2, self).__init__(main_cfg, info_printer)
         self.device = main_cfg.general.device
-        
+
         ### initialize planner state ###
         self.state = "stay"
 
@@ -97,10 +100,11 @@ class ActiveGSPlannerv2(NarutoPlanner):
 
         self.obs_poses = []
 
-
         ### initialize refinement observation poses ###
         refine_steps = int(2 * math.pi * 0.3 / 0.1)
-        self.refine_pose_set = self.generate_circular_trajectory(0.3, 0.1, refine_steps).numpy() # refine_pose-to-center 
+        self.refine_pose_set = self.generate_circular_trajectory(
+            0.3, 0.1, refine_steps
+        ).numpy()  # refine_pose-to-center
 
         ### initialize explore and refine pool ###
         self.explore_pool = defaultdict(lambda: {})
@@ -116,13 +120,22 @@ class ActiveGSPlannerv2(NarutoPlanner):
         self.view_rot_samples = []
         self.view_rot_idx = []
         for i in range(self.num_exploration_stage):
-            self.view_rot_samples.append(self.generate_rotation_samples(
-                torch.from_numpy(self.planner_cfg.up_dir).to(self.device).float(),
-                self.num_dir_samples[i],
-            )) # 1, K, 4, 4
-            self.view_rot_idx.append(torch.range(0, self.num_dir_samples[i]-1).unsqueeze(0).unsqueeze(2).to(self.device))
+            self.view_rot_samples.append(
+                self.generate_rotation_samples(
+                    torch.from_numpy(self.planner_cfg.up_dir).to(self.device).float(),
+                    self.num_dir_samples[i],
+                )
+            )  # 1, K, 4, 4
+            self.view_rot_idx.append(
+                torch.range(0, self.num_dir_samples[i] - 1)
+                .unsqueeze(0)
+                .unsqueeze(2)
+                .to(self.device)
+            )
 
-    def generate_circular_trajectory(self, radius: float, delta: float, steps: int) -> torch.Tensor:
+    def generate_circular_trajectory(
+        self, radius: float, delta: float, steps: int
+    ) -> torch.Tensor:
         """
         Generate a circular trajectory around the current camera pose.
         Each step moves along the circle anticlockwise with a step size of delta.
@@ -135,16 +148,15 @@ class ActiveGSPlannerv2(NarutoPlanner):
         Returns:
             torch.Tensor: A tensor containing Nx4x4 matrices representing poses along the trajectory.
         """
-        
+
         # Extract the initial rotation and translation from the pose
         current_pose = torch.eye(4)
         rotation = current_pose[:3, :3].clone()  # Copy of the initial rotation matrix
         initial_position = current_pose[:3, 3].clone()  # Initial position (x, y, z)
-        
+
         # Calculate the initial point on the circle's surface (+X direction on XY plane)
         circle_start_position = initial_position.clone()
         circle_start_position[0] += radius  # Move along +X axis on XY plane
-
 
         # Initialize the list of poses with the starting pose on the circle
         init_path = self.interpolate_path(initial_position, circle_start_position, 0.1)
@@ -166,7 +178,7 @@ class ActiveGSPlannerv2(NarutoPlanner):
             # Compute the next position on the circle using polar coordinates (X = cos, Y = sin)
             x = radius * math.cos(angle)
             y = radius * math.sin(angle)
-            
+
             # Calculate the new position by adding to the Z coordinate of the initial position
             next_position = initial_position.clone()
             next_position[0] += x
@@ -193,11 +205,11 @@ class ActiveGSPlannerv2(NarutoPlanner):
         return trajectory_tensor
 
     def pose_conversion_sim2slam(self, sim_pose: torch.Tensor) -> torch.Tensor:
-        """ Convert pose from Simulator system to SplaTAM system
-        
+        """Convert pose from Simulator system to SplaTAM system
+
         Args:
             sim_pose: Simulator pose
-        
+
         Returns:
             slam_pose: SplaTAM pose
         """
@@ -208,11 +220,11 @@ class ActiveGSPlannerv2(NarutoPlanner):
         return slam_pose
 
     def pose_conversion_slam2sim(self, slam_pose: torch.Tensor) -> torch.Tensor:
-        """ Convert pose from SplaTAM system to Simulator system
-        
+        """Convert pose from SplaTAM system to Simulator system
+
         Args:
             slam_pose: SplaTAM pose
-        
+
         Returns:
             sim_pose: Simulator pose
         """
@@ -221,39 +233,37 @@ class ActiveGSPlannerv2(NarutoPlanner):
         sim_pose[:3, 2] *= -1
         sim_pose = torch.inverse(self.sim2slam) @ sim_pose
         return sim_pose
-    
+
     def coord_conversion_slam2sim(self, slam_coords: torch.Tensor) -> torch.Tensor:
-        """ Convert coordinate from SplaTAM system to Simulator system
-        
+        """Convert coordinate from SplaTAM system to Simulator system
+
         Args:
             slam_coords: [N,3], slam coordinates
-        
+
         Returns:
             sim_coords: [N,3] Simulator pose
         """
         sim_coords = self.transform_points(torch.inverse(self.sim2slam), slam_coords)
         return sim_coords
-    
+
     def coord_conversion_sim2slam(self, sim_coords: torch.Tensor) -> torch.Tensor:
-        """ Convert coordinate from SplaTAM system to Simulator system
-        
+        """Convert coordinate from SplaTAM system to Simulator system
+
         Args:
             sim_coords: [N,3], slam coordinates
-        
+
         Returns:
             slam_coords: [N,3] Simulator pose
         """
         slam_coords = self.transform_points(self.sim2slam, sim_coords)
         return slam_coords
 
-    def init_data(self, 
-                  sim2slam: torch.Tensor
-                  ) -> None:
+    def init_data(self, sim2slam: torch.Tensor) -> None:
         """initialize data for naruto planner
-    
+
         Args:
             # bbox (List, [3,2]): bounding box corners coordinates
-    
+
         Attributes:
             gs_z_levels (List, [N])                  : Goal Space Z-levels. if not provided, unitformly samples from Z range.
             sim2slam (torch.Tensor): simator-to-slam conversion
@@ -273,9 +283,13 @@ class ActiveGSPlannerv2(NarutoPlanner):
             raise NotImplementedError
         self.sim2slam = sim2slam
 
-        up_dir_sim = torch.from_numpy(self.planner_cfg.up_dir).float().to(self.sim2slam.device).unsqueeze(1)
+        up_dir_sim = (
+            torch.from_numpy(self.planner_cfg.up_dir)
+            .float()
+            .to(self.sim2slam.device)
+            .unsqueeze(1)
+        )
         self.up_dir_slam = (self.sim2slam[:3, :3] @ up_dir_sim)[:, 0].cpu().numpy()
-
 
         ### bounding box ###
         self.bbox = np.asarray(self.main_cfg.slam.bbox_bound)
@@ -293,37 +307,35 @@ class ActiveGSPlannerv2(NarutoPlanner):
 
         # ### Goal Space ###
         # self.gs_x_range = torch.arange(0, self.Nx, 2)
-        # self.gs_y_range = torch.arange(0, self.Ny, 2) 
-        # self.gs_z_range = torch.arange(0, self.Nz, 2) 
+        # self.gs_y_range = torch.arange(0, self.Ny, 2)
+        # self.gs_z_range = torch.arange(0, self.Nz, 2)
         # self.gs_x, self.gs_y, self.gs_z = torch.meshgrid(self.gs_x_range, self.gs_y_range, self.gs_z_range, indexing="ij")
-        # self.goal_space_pts = torch.cat([self.gs_x.reshape(-1, 1), 
-        #                                  self.gs_y.reshape(-1, 1), 
+        # self.goal_space_pts = torch.cat([self.gs_x.reshape(-1, 1),
+        #                                  self.gs_y.reshape(-1, 1),
         #                                  self.gs_z.reshape(-1, 1)], dim=1).cuda().float()
 
     def load_init_pose(self) -> torch.Tensor:
-        """ load initial pose
-    
+        """load initial pose
+
         Returns:
             pose: [4, 4], camera-to-world pose
         """
         return self.pose_loader.load_init_pose().to(self.device)
 
     def check_observation_done(self):
-        """ check if observation is completed at goal location 
-        """
+        """check if observation is completed at goal location"""
         is_obs_done = len(self.obs_poses) == 0
         return is_obs_done
 
-    def rotation_planning_at_goal(self, 
-                                   cur_pose : np.ndarray,
-                                   goal_pose: np.ndarray
-                                   ) -> np.ndarray:
-        """ perform rotation planning
-    
+    def rotation_planning_at_goal(
+        self, cur_pose: np.ndarray, goal_pose: np.ndarray
+    ) -> np.ndarray:
+        """perform rotation planning
+
         Args:
             cur_pose (np.ndarray, [4,4]): current pose. Format: camera-to-world, RUB system
             goal_pose (np.ndarray, [4,4]): goal pose. Format: camera-to-world, RUB system
-    
+
         Returns:
             new_pose (np.ndarray, [4,4]): new pose. Format: camera-to-world, RUB system
 
@@ -331,36 +343,38 @@ class ActiveGSPlannerv2(NarutoPlanner):
             rots (List): planned rotations. each element is (np.ndarray, [3,3])
         """
         rot = goal_pose[:3, :3]
-        self.rots = rotation_planning(cur_pose[:3, :3], [rot], self.planner_cfg.max_rot_deg)
+        self.rots = rotation_planning(
+            cur_pose[:3, :3], [rot], self.planner_cfg.max_rot_deg
+        )
 
         new_pose = cur_pose.copy()
         return new_pose
 
     def rotating_at_goal(self, cur_pose: np.ndarray) -> np.ndarray:
-        """ observing at the goal location using the observation poses in self.obs_poses. 
-    
+        """observing at the goal location using the observation poses in self.obs_poses.
+
         Args:
             cur_pose (np.ndarray, [4,4]): current pose. Format: camera-to-world, RUB system
-    
+
         Returns:
             new_pose (np.ndarray, [4,4]): new pose. Format: camera-to-world, RUB system
         """
         return self.rotating_at_current_loc(cur_pose)
 
-    def observation_planning_at_goal(self, cur_pose : np.ndarray) -> np.ndarray:
-        """ perform observation planning
-    
+    def observation_planning_at_goal(self, cur_pose: np.ndarray) -> np.ndarray:
+        """perform observation planning
+
         Args:
             cur_pose (np.ndarray, [4,4]): current pose. Format: camera-to-world, RUB system
             goal_pose (np.ndarray, [4,4]): goal pose. Format: camera-to-world, RUB system
-    
+
         Returns:
             new_pose (np.ndarray, [4,4]): new pose. Format: camera-to-world, RUB system
 
         Attributes:
             obs_poses (List): planned observations. each element is (np.ndarray, [3,3])
         """
-        ### FIXME: update observation planning ### 
+        ### FIXME: update observation planning ###
         # refine_poses = cur_pose @ self.refine_pose_set
         # self.obs_poses = [i for i in refine_poses]
         # new_pose = cur_pose.copy()
@@ -370,8 +384,8 @@ class ActiveGSPlannerv2(NarutoPlanner):
         return new_pose
 
     def observing_at_goal(self) -> np.ndarray:
-        """ observing at the current location using the rotations in self.rots. 
-    
+        """observing at the current location using the rotations in self.rots.
+
         Returns:
             new_pose (np.ndarray, [4,4]): new pose. Format: camera-to-world, RUB system
         """
@@ -379,8 +393,8 @@ class ActiveGSPlannerv2(NarutoPlanner):
         return new_pose
 
     def update_state(self) -> None:
-        """ update state machine for the planner
-    
+        """update state machine for the planner
+
         Attributes:
             state (str): planner state
         """
@@ -457,31 +471,38 @@ class ActiveGSPlannerv2(NarutoPlanner):
             is_observation_done = self.check_observation_done()
             self.state = "planning" if is_observation_done else "observingAtGoal"
 
+    def moving_to_goal(
+        self,
+        cur_pose: np.ndarray,
+        lookat_loc: np.ndarray,
+        next_loc: np.ndarray,
+        up_dir: np.ndarray = None,
+    ) -> np.ndarray:
+        """moving to goal while looking at lookat_loc
 
-    def moving_to_goal(self, 
-                       cur_pose  : np.ndarray,
-                       lookat_loc: np.ndarray,
-                       next_loc  : np.ndarray,
-                       up_dir    : np.ndarray = None
-                       ) -> np.ndarray:
-        """ moving to goal while looking at lookat_loc
-    
         Args:
             cur_pose (np.ndarray, [4,4]): current pose. Format: camera-to-world, RUB system
             lookat_loc (np.ndarray, [3]): look-at location
             next_loc (np.ndarray, [3]): next location
-    
+
         Returns:
             new_pose (np.ndarray, [4,4]): new pose. Format: camera-to-world, RUB system
         """
-        rot = compute_camera_pose(next_loc, lookat_loc, up_dir=self.planner_cfg.up_dir if up_dir is None else up_dir, system="RDF")
+        rot = compute_camera_pose(
+            next_loc,
+            lookat_loc,
+            up_dir=self.planner_cfg.up_dir if up_dir is None else up_dir,
+            system="RDF",
+        )
 
         new_pose = cur_pose.copy()
         new_pose[:3, :3] = rot
         new_pose[:3, 3] = next_loc
         return new_pose
 
-    def interpolate_path(self, A: torch.Tensor, B: torch.Tensor, step: float) -> List[torch.Tensor]:
+    def interpolate_path(
+        self, A: torch.Tensor, B: torch.Tensor, step: float
+    ) -> List[torch.Tensor]:
         """
         Generates a list of intermediate points between two locations, A and B, with a given step size,
         excluding A and including B in the resulting list.
@@ -493,7 +514,7 @@ class ActiveGSPlannerv2(NarutoPlanner):
 
         Returns:
             List[torch.Tensor]: A list of tensors representing intermediate points from A to B, excluding A and including B.
-        
+
         Raises:
             ValueError: If A and B have different shapes or step size is non-positive.
         """
@@ -512,12 +533,14 @@ class ActiveGSPlannerv2(NarutoPlanner):
         points = [A + (B - A) * ((i + 1) * step / distance) for i in range(num_steps)]
 
         ### Append B explicitly to ensure it is included ###
-        if len(points) == 0 or ((points[-1] - B)!=0).any():
+        if len(points) == 0 or ((points[-1] - B) != 0).any():
             points.append(B)
-        
+
         return points
 
-    def transform_points(self, transformation: torch.Tensor, points: torch.Tensor) -> torch.Tensor:
+    def transform_points(
+        self, transformation: torch.Tensor, points: torch.Tensor
+    ) -> torch.Tensor:
         """
         Transforms a set of 3D points by a 4x4 transformation matrix.
 
@@ -530,63 +553,65 @@ class ActiveGSPlannerv2(NarutoPlanner):
         """
         # Step 1: Convert points to homogeneous coordinates (Nx4)
         N = points.shape[0]
-        ones = torch.ones((N, 1), dtype=points.dtype, device=points.device)  ### Add a column of ones
-        points_homogeneous = torch.cat([points, ones], dim=1)  ### Concatenate to make Nx4 matrix
+        ones = torch.ones(
+            (N, 1), dtype=points.dtype, device=points.device
+        )  ### Add a column of ones
+        points_homogeneous = torch.cat(
+            [points, ones], dim=1
+        )  ### Concatenate to make Nx4 matrix
 
         # Step 2: Apply the transformation (4x4) to each point (Nx4)
-        transformed_homogeneous = points_homogeneous @ transformation.T  ### Multiply by the transformation matrix
-        
+        transformed_homogeneous = (
+            points_homogeneous @ transformation.T
+        )  ### Multiply by the transformation matrix
+
         # Step 3: Convert back from homogeneous to 3D by dividing by the last (homogeneous) coordinate
-        transformed_points = transformed_homogeneous[:, :3] / transformed_homogeneous[:, 3].unsqueeze(1)
+        transformed_points = transformed_homogeneous[:, :3] / transformed_homogeneous[
+            :, 3
+        ].unsqueeze(1)
 
         return transformed_points
 
     def convert_occ_grid_to_sdf(self, occ_grid):
         """
-    
+
         Args:
             occ_grid: [D,H,W]
-    
+
         Returns:
-            
-    
+
+
         Attributes:
-            
+
         """
         sdf_vol = occ_grid.clone()
-        sdf_vol[sdf_vol==1] = 0 # convert occupied to surface
-        sdf_vol[sdf_vol<0] = 100 # convert free space to +ve
+        sdf_vol[sdf_vol == 1] = 0  # convert occupied to surface
+        sdf_vol[sdf_vol < 0] = 100  # convert free space to +ve
         # sdf_vol[sdf_vol==-1] = 100 # convert free space to +ve
         return sdf_vol
 
-    def local_path_planning_rrt(self,
-                         sdf_vol : np.ndarray,
-                         cur_vxl: np.ndarray,
-                         goal_vxl: np.ndarray
-                         ) -> Tuple:
-        """ Path planning
-    
+    def local_path_planning_rrt(
+        self, sdf_vol: np.ndarray, cur_vxl: np.ndarray, goal_vxl: np.ndarray
+    ) -> Tuple:
+        """Path planning
+
         Args:
             sdf_vol (np.ndarray, [X,Y,Z]): SDF volume
-            cur_vxl (np.ndarray, [4,4]) : current vxl. 
+            cur_vxl (np.ndarray, [4,4]) : current vxl.
             goal_vxl (np.ndarray, [3])   : goal location. Unit : voxel
-    
+
         Returns:
             path (List)             : each element is a Node. [GoalNode, ..., CurrentNode]
         """
         # ### Force initial SDF to be empty space ###
         # if self.step == 0:
         #     sdf_vol = sdf_vol * 0. + 100.
-        
+
         ## run local path planner ##
-        self.local_planner.start_new_plan(
-            start = cur_vxl,
-            goal = goal_vxl,
-            sdf_map = sdf_vol
-        )
+        self.local_planner.start_new_plan(start=cur_vxl, goal=goal_vxl, sdf_map=sdf_vol)
         target_reachable = self.local_planner.run(use_free_space=True)
 
-        if not(target_reachable):
+        if not (target_reachable):
             raise NotImplementedError
 
         ### find path ###
@@ -595,25 +620,35 @@ class ActiveGSPlannerv2(NarutoPlanner):
         path = torch.concat(path, dim=0)
         return path
 
-
-    def path_planning(self, map: torch.Tensor, origin: torch.Tensor, start_pose: torch.Tensor, end_pose: torch.Tensor, trans_step: float, rot_step: float, voxel_size):
+    def path_planning(
+        self,
+        map: torch.Tensor,
+        origin: torch.Tensor,
+        start_pose: torch.Tensor,
+        end_pose: torch.Tensor,
+        trans_step: float,
+        rot_step: float,
+        voxel_size,
+    ):
         """
-    
+
         Args:
             map: [D, H, W], occupancy grid
             start_pose: [4, 4] start pose, c2w, SplaTAM coordinate system
             end_pose: [4, 4] end pose, c2w, SplaTAM coordinate system
             trans_step: translation step size, unit: metre
             rot_step: rotation step size, unit: degree
-    
+
         Returns:
             path: [N, 4, 4] planned path, c2w, excluding start_pose and including end_pose
-    
+
         Attributes:
-            
+
         """
         if self.step == 0 or torch.norm(start_pose[:3, 3] - end_pose[:3, 3]) < 1e-4:
-            path = self.interpolate_path(start_pose[:3, 3], end_pose[:3, 3], self.planner_cfg.trans_step_size) # FIXME: add local planner
+            path = self.interpolate_path(
+                start_pose[:3, 3], end_pose[:3, 3], self.planner_cfg.trans_step_size
+            )  # FIXME: add local planner
         else:
             ### transform to Simulator system ###
             start_pose_sim = self.pose_conversion_slam2sim(start_pose)
@@ -625,21 +660,21 @@ class ActiveGSPlannerv2(NarutoPlanner):
 
             ### local path planner ###
             # path = astar_planner(
-            #     map.detach().cpu(), 
-            #     start_loc.detach().cpu(), 
-            #     end_loc.detach().cpu(), 
+            #     map.detach().cpu(),
+            #     start_loc.detach().cpu(),
+            #     end_loc.detach().cpu(),
             #     trans_step,
             #     1.0,
             #     voxel_size,
             #     ).to(self.device)
             sdf_vol = self.convert_occ_grid_to_sdf(map)
             path = self.local_path_planning_rrt(
-                                sdf_vol.detach().cpu().numpy(), 
-                                (start_loc/self.voxel_size).detach().cpu().numpy(), 
-                                (end_loc/self.voxel_size).detach().cpu().numpy()
-                                )
+                sdf_vol.detach().cpu().numpy(),
+                (start_loc / self.voxel_size).detach().cpu().numpy(),
+                (end_loc / self.voxel_size).detach().cpu().numpy(),
+            )
             path *= self.voxel_size
-            
+
             ### convert back to SLAM coordinates ###
             path += origin
             path = self.coord_conversion_sim2slam(path)
@@ -651,28 +686,25 @@ class ActiveGSPlannerv2(NarutoPlanner):
         ### rotation planning ###
         path = [i.detach().cpu().numpy() for i in path]
         path = remove_consecutive_duplicates(path)
-        
+
         # gravity_dir = self.up_dir_slam.copy()
         new_path = smoothen_trajectory(
-            start_pose.detach().cpu().numpy(), 
-            end_pose.detach().cpu().numpy(), 
-            path, 
-            rot_step, 
-            -self.up_dir_slam
-            )
+            start_pose.detach().cpu().numpy(),
+            end_pose.detach().cpu().numpy(),
+            path,
+            rot_step,
+            -self.up_dir_slam,
+        )
         new_path = [i for i in new_path]
         return new_path
 
-    def compute_next_state_pose(self, 
-                                cur_pose       : torch.Tensor,
-                                gs_slam
-                                ) -> torch.Tensor:
-        """ compute next state pose
-    
+    def compute_next_state_pose(self, cur_pose: torch.Tensor, gs_slam) -> torch.Tensor:
+        """compute next state pose
+
         Args:
             cur_pose (torch.Tensor, [4,4]): current pose. Format: camera-to-world (RUB; relative pose in SplaTAM)
             gs_slam: SplaTAM
-    
+
         Returns:
             new_pose (torch.Tensor, [4,4]): new pose. Format: camera-to-world
 
@@ -686,11 +718,15 @@ class ActiveGSPlannerv2(NarutoPlanner):
         ### planning
         ##################################################
         if self.state == "planning":
-            planner_state = f"{self.planning_state}_{self.exploration_stage}" if self.planning_state == "exploration" else self.planning_state
+            planner_state = (
+                f"{self.planning_state}_{self.exploration_stage}"
+                if self.planning_state == "exploration"
+                else self.planning_state
+            )
             self.timer.start(f"rendering_planning_{planner_state}", "Planner")
             planning_out = self.rendering_based_planning(cur_pose, gs_slam)
             self.timer.end(f"rendering_planning_{planner_state}")
-            self.goal_pose = planning_out['new_pose'].clone() # RelPose c2w at SplaTAM
+            self.goal_pose = planning_out["new_pose"].clone()  # RelPose c2w at SplaTAM
             if (self.goal_pose == cur_pose).all():
                 self.path = [self.goal_pose]
             else:
@@ -698,12 +734,12 @@ class ActiveGSPlannerv2(NarutoPlanner):
                 self.path = self.path_planning(
                     self.gs_slam.explr_map.occupancy_grid,
                     self.gs_slam.explr_map.origin,
-                    cur_pose, 
-                    self.goal_pose, 
-                    self.planner_cfg.trans_step_size, 
+                    cur_pose,
+                    self.goal_pose,
+                    self.planner_cfg.trans_step_size,
                     self.planner_cfg.rot_step_size,
-                    self.main_cfg.slam.bbox_voxel_size
-                    )
+                    self.main_cfg.slam.bbox_voxel_size,
+                )
                 self.timer.end(f"rrt_planning_{planner_state}")
             self.lookat_tgts = [self.goal_pose[:3, 3].detach().cpu().numpy()]
             new_pose = cur_pose
@@ -712,7 +748,12 @@ class ActiveGSPlannerv2(NarutoPlanner):
         ### rotation planning at start location
         ##################################################
         elif self.state == "rotationPlanningAtStart":
-            new_pose = self.rotation_planning_at_start(cur_pose.detach().cpu().numpy(), self.lookat_tgts[0], self.up_dir_slam, "RDF")
+            new_pose = self.rotation_planning_at_start(
+                cur_pose.detach().cpu().numpy(),
+                self.lookat_tgts[0],
+                self.up_dir_slam,
+                "RDF",
+            )
 
         ##################################################
         ### rotating at start location
@@ -721,7 +762,7 @@ class ActiveGSPlannerv2(NarutoPlanner):
             new_pose = self.rotating_at_start(cur_pose.detach().cpu().numpy())
 
         ##################################################
-        ### moving to goal 
+        ### moving to goal
         ##################################################
         elif self.state == "movingToGoal":
             # ### FIXME: add local path planner's path ###
@@ -734,12 +775,14 @@ class ActiveGSPlannerv2(NarutoPlanner):
             # self.path.pop(0)
 
             new_pose = self.path.pop(0)
-            
+
         ##################################################
         ### rotation planning at goal location
         ##################################################
         elif self.state == "rotationPlanningAtGoal":
-            new_pose = self.rotation_planning_at_goal(cur_pose.detach().cpu().numpy(), self.goal_pose.detach().cpu().numpy())
+            new_pose = self.rotation_planning_at_goal(
+                cur_pose.detach().cpu().numpy(), self.goal_pose.detach().cpu().numpy()
+            )
 
         ##################################################
         ### rotating at goal location
@@ -751,7 +794,9 @@ class ActiveGSPlannerv2(NarutoPlanner):
         ### observation planning at goal location
         ##################################################
         elif self.state == "observationPlanningAtGoal":
-            new_pose = self.observation_planning_at_goal(cur_pose.detach().cpu().numpy())
+            new_pose = self.observation_planning_at_goal(
+                cur_pose.detach().cpu().numpy()
+            )
 
         ##################################################
         ### observation at goal location
@@ -767,10 +812,11 @@ class ActiveGSPlannerv2(NarutoPlanner):
 
         return new_pose
 
-    def generate_rotation_samples(self, 
-                                  up: torch.Tensor,
-                                  K: int = 10, 
-                                  ) -> torch.Tensor:
+    def generate_rotation_samples(
+        self,
+        up: torch.Tensor,
+        K: int = 10,
+    ) -> torch.Tensor:
         """
         Generates 1xKx4x4 rotation matrices with K evenly distributed viewing directions.
 
@@ -780,7 +826,7 @@ class ActiveGSPlannerv2(NarutoPlanner):
 
         Returns:
             torch.Tensor: An 1xKx4x4 tensor where each 4x4 matrix represents a transformation for a viewing direction.
-        
+
         """
         N = 1
 
@@ -791,8 +837,10 @@ class ActiveGSPlannerv2(NarutoPlanner):
         ### Generate evenly spaced directions on the sphere ###
         theta = 2 * torch.pi * indices / golden_ratio
         z = 1 - (2 * indices + 1) / K
-        radius = torch.sqrt(1 - z ** 2)
-        directions = torch.stack((radius * torch.cos(theta), radius * torch.sin(theta), z), dim=1).to(up.device)
+        radius = torch.sqrt(1 - z**2)
+        directions = torch.stack(
+            (radius * torch.cos(theta), radius * torch.sin(theta), z), dim=1
+        ).to(up.device)
 
         ### Initialize tensor to store 1xNx4x4 transformation matrices ###
         transformations = torch.zeros((N, K, 4, 4)).to(up.device)
@@ -800,25 +848,30 @@ class ActiveGSPlannerv2(NarutoPlanner):
         ### Compute right, true_up, and forward vectors in batches ###
         forward = -directions.unsqueeze(0).expand(-1, K, -1)  ### Shape NxKx3
         up_expanded = up.unsqueeze(0).unsqueeze(0)  ### Shape: (1, 1, 3)
-        up_expanded = up_expanded.expand(forward.shape[0], forward.shape[1], -1)  ### Shape: (N, K, 3)
+        up_expanded = up_expanded.expand(
+            forward.shape[0], forward.shape[1], -1
+        )  ### Shape: (N, K, 3)
         right = torch.cross(up_expanded, forward, dim=2)
         right = right / right.norm(dim=2, keepdim=True)  ### Normalize right vector
         true_up = torch.cross(forward, right, dim=2)  ### Compute orthogonal up vector
 
         ### Stack right, true_up, and forward to form rotation part of the matrices ###
-        rotation_matrices = torch.stack((right, true_up, forward), dim=3)  ### Shape NxKx3x3
+        rotation_matrices = torch.stack(
+            (right, true_up, forward), dim=3
+        )  ### Shape NxKx3x3
 
         ### Create the 4x4 transformation matrices ###
         transformations[:, :, :3, :3] = rotation_matrices  ### Set rotation part
-        
+
         ### Set the bottom row to [0, 0, 0, 1] for homogeneous coordinates ###
         transformations[:, :, 3, 3] = 1
         return transformations
 
-    def generate_candidate_poses(self, 
-                                points: torch.Tensor, 
-                                transform_pose: torch.Tensor = None,
-                                ) -> torch.Tensor:
+    def generate_candidate_poses(
+        self,
+        points: torch.Tensor,
+        transform_pose: torch.Tensor = None,
+    ) -> torch.Tensor:
         """
         Generates NxKx4x4 candidate poses for N points in space with K evenly distributed viewing directions per point.
 
@@ -835,27 +888,34 @@ class ActiveGSPlannerv2(NarutoPlanner):
         N = points.shape[0]  ### Number of input points
         K = self.view_rot_samples[self.exploration_stage].shape[1]
 
-        transformations = self.view_rot_samples[self.exploration_stage].repeat(N, 1, 1, 1)
-        
+        transformations = self.view_rot_samples[self.exploration_stage].repeat(
+            N, 1, 1, 1
+        )
+
         ### Create the 4x4 transformation matrices ###
-        transformations[:, :, :3, 3] = points.unsqueeze(1).expand(-1, K, -1)  ### Set translation part
-        
+        transformations[:, :, :3, 3] = points.unsqueeze(1).expand(
+            -1, K, -1
+        )  ### Set translation part
+
         # If transform_pose is provided, apply it to all generated poses
         if transform_pose is not None:
             # Ensure the transform_pose is a 4x4 tensor for matrix multiplication
-            assert transform_pose.shape == (4, 4), "transform_pose must be a 4x4 tensor."
+            assert transform_pose.shape == (4, 4), (
+                "transform_pose must be a 4x4 tensor."
+            )
             # Apply the transformation to each pose using matrix multiplication
             transformations[:, :, :3, 1] *= -1
-            transformations[:, :, :3, 2] *= -1 # RUB @ Sim
+            transformations[:, :, :3, 2] *= -1  # RUB @ Sim
             transformations = transform_pose @ transformations
 
         return transformations
 
-    def create_skybox_poses(self, 
-                            points: torch.Tensor, 
-                            up_direction: torch.Tensor, 
-                            transform_pose: torch.Tensor = None
-                            ) -> torch.Tensor:
+    def create_skybox_poses(
+        self,
+        points: torch.Tensor,
+        up_direction: torch.Tensor,
+        transform_pose: torch.Tensor = None,
+    ) -> torch.Tensor:
         """
         Creates a set of poses for each point looking in 6 directions, like a skybox.
 
@@ -871,22 +931,30 @@ class ActiveGSPlannerv2(NarutoPlanner):
         up = F.normalize(up_direction, dim=0)  # Ensure it is a unit vector
 
         # Define the 6 directions to look at (forward, back, left, right, up, down)
-        look_directions = torch.tensor([
-            [1, 0, 0],   # +X
-            [-1, 0, 0],  # -X
-            [0, 1, 0],   # +Y
-            [0, -1, 0],  # -Y
-            [0, 0, 1],   # +Z
-            [0, 0, -1]   # -Z
-        ], dtype=points.dtype, device=points.device)  # 6x3 tensor
+        look_directions = torch.tensor(
+            [
+                [1, 0, 0],  # +X
+                [-1, 0, 0],  # -X
+                [0, 1, 0],  # +Y
+                [0, -1, 0],  # -Y
+                [0, 0, 1],  # +Z
+                [0, 0, -1],  # -Z
+            ],
+            dtype=points.dtype,
+            device=points.device,
+        )  # 6x3 tensor
 
         # Prepare an output tensor (N x 6 x 4 x 4)
         N = points.shape[0]
-        poses = torch.zeros((N, look_directions.shape[0], 4, 4), dtype=points.dtype, device=points.device)
+        poses = torch.zeros(
+            (N, look_directions.shape[0], 4, 4),
+            dtype=points.dtype,
+            device=points.device,
+        )
 
         for i, direction in enumerate(look_directions):
             # view dir: -Z (backward)
-            view_direction =  -F.normalize(direction, dim=0)  # Normalize the direction
+            view_direction = -F.normalize(direction, dim=0)  # Normalize the direction
 
             # Compute the right direction using cross product (up x view_dir)
             right_dir = torch.cross(up.expand_as(view_direction), view_direction)
@@ -899,7 +967,9 @@ class ActiveGSPlannerv2(NarutoPlanner):
             adjusted_up = torch.cross(view_direction, right)
 
             # Create a rotation matrix (3x3)
-            rotation_matrix = torch.stack([right, adjusted_up, view_direction], dim=1)  # 3x3 matrix
+            rotation_matrix = torch.stack(
+                [right, adjusted_up, view_direction], dim=1
+            )  # 3x3 matrix
 
             # Create a transformation matrix (4x4) for each point
             poses[:, i, :3, :3] = rotation_matrix
@@ -909,17 +979,19 @@ class ActiveGSPlannerv2(NarutoPlanner):
         # If transform_pose is provided, apply it to all skybox poses
         if transform_pose is not None:
             # Ensure the transform_pose is a 4x4 tensor for matrix multiplication
-            assert transform_pose.shape == (4, 4), "transform_pose must be a 4x4 tensor."
+            assert transform_pose.shape == (4, 4), (
+                "transform_pose must be a 4x4 tensor."
+            )
             # Apply the transformation to each pose using matrix multiplication
             poses[:, :, :3, 1] *= -1
-            poses[:, :, :3, 2] *= -1 # RUB @ Sim
+            poses[:, :, :3, 2] *= -1  # RUB @ Sim
             poses = transform_pose @ poses
 
         return poses
 
     def add_explore_pool_cand(self, cand_poses: torch.Tensor, cand_keys: torch.Tensor):
-        """ add candiate poses to explore pool
-    
+        """add candiate poses to explore pool
+
         Args:
             cand_poses: [N, 4, 4], candidate poses
             cand_keys: [N, 4], candidate key with elements [X, Y, Z, R_i]
@@ -927,30 +999,34 @@ class ActiveGSPlannerv2(NarutoPlanner):
         for i in range(cand_keys.shape[0]):
             key = tuple(cand_keys[i].cpu().numpy())
             if key not in self.explore_pool:
-                self.explore_pool[key]['pose'] = cand_poses[i]
-    
-    def update_explore_pool_cand(self, explore_igs: torch.Tensor, cand_keys: List[Tuple], next_visit: int):
+                self.explore_pool[key]["pose"] = cand_poses[i]
+
+    def update_explore_pool_cand(
+        self, explore_igs: torch.Tensor, cand_keys: List[Tuple], next_visit: int
+    ):
         """update explore pool candidates's explore_ig
-    
+
         Args:
             explore_igs: [N], exploration information gain
             cand_keys: candidate key with elements [X, Y, Z, R_i]
             next_visit: index of next visit pose
         """
         for i in range(len(explore_igs)):
-            self.explore_pool[cand_keys[i]]['ig'] = explore_igs[i]
-            if 'visit' not in self.explore_pool[cand_keys[i]].keys():
-                self.explore_pool[cand_keys[i]]['visit'] = 0
+            self.explore_pool[cand_keys[i]]["ig"] = explore_igs[i]
+            if "visit" not in self.explore_pool[cand_keys[i]].keys():
+                self.explore_pool[cand_keys[i]]["visit"] = 0
 
-        self.explore_pool[cand_keys[next_visit]]['visit'] += 1
+        self.explore_pool[cand_keys[next_visit]]["visit"] += 1
 
-
-    def del_explore_pool_cand(self, explore_igs: torch.Tensor,
-                              cand_keys: List[Tuple],
-                              explore_thre: float,
-                              recognize_thre: float):
+    def del_explore_pool_cand(
+        self,
+        explore_igs: torch.Tensor,
+        cand_keys: List[Tuple],
+        explore_thre: float,
+        recognize_thre: float,
+    ):
         """delete explore pool candidates that do not need more observations
-    
+
         Args:
             explore_igs: [N], exploration information gain
             cand_keys: candidate key with elements [X, Y, Z, R_i]
@@ -958,16 +1034,18 @@ class ActiveGSPlannerv2(NarutoPlanner):
             recognize_thre: percentage of recognized pixel thre (maximun caltigory probability > 0.5)
         """
         explore_mask = explore_igs < (self.img_h * self.img_w) * explore_thre
-        revisit = torch.tensor([self.explore_pool[cand]['visit'] for cand in cand_keys]).to(explore_mask.device)
+        revisit = torch.tensor(
+            [self.explore_pool[cand]["visit"] for cand in cand_keys]
+        ).to(explore_mask.device)
         visit_mask = revisit > 3  # don't want to revisit a place by too many times
-        rm_idx = torch.where(explore_mask  | visit_mask )[0]
+        rm_idx = torch.where(explore_mask | visit_mask)[0]
         # rm_idx = torch.where(explore_igs == 0)[0]
         for i in rm_idx:
             del self.explore_pool[cand_keys[i]]
-    
+
     def get_explore_pool_poses(self) -> Tuple[torch.Tensor, List[Tuple]]:
-        """ get exploration pool poses and keys
-    
+        """get exploration pool poses and keys
+
         Returns:
             cand_poses: [N, 4, 4], candidate poses
             cand_keys: candidate key with elements [X, Y, Z, R_i]
@@ -975,37 +1053,41 @@ class ActiveGSPlannerv2(NarutoPlanner):
         cand_poses = []
         cand_keys = []
         for key, val in self.explore_pool.items():
-            cand_poses.append(val['pose'])
+            cand_poses.append(val["pose"])
             cand_keys.append(key)
         cand_poses = torch.stack(cand_poses)
         return cand_poses, cand_keys
 
     def add_refine_pool_cand(self, kf_data: List):
-        """ add keyframe candidates to refinement pool
-    
+        """add keyframe candidates to refinement pool
+
         Args:
             kf_data: keyframe data
-    
+
         Attributes:
             refine_pool: add candidates to refine_pool
-            
+
         """
         for kf in kf_data:
             if self.step != 0:
-                sim_c2w = self.pose_conversion_slam2sim(torch.inverse(kf['est_w2c']))
-                kf_vxl = self.gs_slam.explr_map.transform_xyz_to_vxl(sim_c2w[:3, 3].unsqueeze(0))
+                sim_c2w = self.pose_conversion_slam2sim(torch.inverse(kf["est_w2c"]))
+                kf_vxl = self.gs_slam.explr_map.transform_xyz_to_vxl(
+                    sim_c2w[:3, 3].unsqueeze(0)
+                )
                 min_dist = self.gs_slam.explr_map.compute_min_distance_from_occ(
-                    self.gs_slam.explr_map.occupancy_grid, 
-                    kf_vxl
-                    )[0]
-                if min_dist * self.gs_slam.explr_map.voxel_size > self.planner_cfg.surface_dist_thre:
-                    self.refine_pool[kf['id']] = kf    
+                    self.gs_slam.explr_map.occupancy_grid, kf_vxl
+                )[0]
+                if (
+                    min_dist * self.gs_slam.explr_map.voxel_size
+                    > self.planner_cfg.surface_dist_thre
+                ):
+                    self.refine_pool[kf["id"]] = kf
             else:
-                self.refine_pool[kf['id']] = kf
-    
+                self.refine_pool[kf["id"]] = kf
+
     def get_refine_pool_data(self) -> Tuple[List[Tuple], List[Tuple], torch.Tensor]:
-        """ get refine pool data
-    
+        """get refine pool data
+
         Returns:
             cand_data: refinement candidate data
             cand_keys: refinement candidate key
@@ -1017,21 +1099,22 @@ class ActiveGSPlannerv2(NarutoPlanner):
         for key, val in self.refine_pool.items():
             cand_data.append(val)
             cand_keys.append(key)
-            cand_poses.append(torch.inverse(val['est_w2c']))
+            cand_poses.append(torch.inverse(val["est_w2c"]))
         cand_poses = torch.stack(cand_poses)
         return cand_data, cand_keys, cand_poses
 
-    def del_refine_pool_cand(self, 
-                             color_igs: torch.Tensor, 
-                             depth_igs: torch.Tensor,
-                             seman_igs: torch.Tensor,
-                             cand_keys: List[Tuple],
-                             target_psnr: float = 34,
-                             target_rel_depth_err: float = 0.01,
-                             target_miou: float = 0.9,
-                             ):
+    def del_refine_pool_cand(
+        self,
+        color_igs: torch.Tensor,
+        depth_igs: torch.Tensor,
+        seman_igs: torch.Tensor,
+        cand_keys: List[Tuple],
+        target_psnr: float = 34,
+        target_rel_depth_err: float = 0.01,
+        target_miou: float = 0.9,
+    ):
         """delete refine pool candidates that are already good enough
-    
+
         Args:
             color_igs: [N], color information gain (PSNR)
             depth_igs: [N], depth informatoion gain (rel. depth error)
@@ -1040,24 +1123,25 @@ class ActiveGSPlannerv2(NarutoPlanner):
             target_rel_depth_err: target relative depth error
 
         """
-        rm_idx = torch.where((color_igs > target_psnr) * (depth_igs < target_rel_depth_err) * (seman_igs > target_miou))[0]
+        rm_idx = torch.where(
+            (color_igs > target_psnr)
+            * (depth_igs < target_rel_depth_err)
+            * (seman_igs > target_miou)
+        )[0]
         for i in rm_idx:
             del self.refine_pool[cand_keys[i]]
 
-    def rendering_based_planning(self, 
-                                 cur_pose,
-                                 gs_slam
-                                 ):
-        """ Rendering-based planning (goal searching)
-    
+    def rendering_based_planning(self, cur_pose, gs_slam):
+        """Rendering-based planning (goal searching)
+
         Args:
             cur_pose (torch.Tensor, [4,4]): current pose. Format: camera-to-world (RUB; relative pose in SplaTAM)
             gs_slam: SplaTAM
-    
+
         Returns:
             Dict: planning output
                 # - path (List)             : each element is a Node. [GoalNode, ..., CurrentNode]
-    
+
         Attributes:
         """
         new_pose = cur_pose
@@ -1066,27 +1150,37 @@ class ActiveGSPlannerv2(NarutoPlanner):
         ### Get Exploration map
         ##################################################
         # if self.planning_state in ["exploration", "refinement"]:
-        if self.planning_state == "exploration" and self.exploration_stage < self.num_exploration_stage:
-            self.info_printer(f"Current state: {self.state} | {self.planning_state}: Getting New Exploration Map", self.step, self.__class__.__name__)
+        if (
+            self.planning_state == "exploration"
+            and self.exploration_stage < self.num_exploration_stage
+        ):
+            self.info_printer(
+                f"Current state: {self.state} | {self.planning_state}: Getting New Exploration Map",
+                self.step,
+                self.__class__.__name__,
+            )
 
             ### get exploration map (explored free space @ Sim coordinate system) ###
             gs_z_levels = self.gs_z_levels[self.exploration_stage]
             xy_sampling_step = self.planner_cfg.xy_sampling_step[self.exploration_stage]
             new_free_voxels = gs_slam.explr_map.get_new_free_voxels(
-                use_xyz_filter=True, 
+                use_xyz_filter=True,
                 xy_sampling_step=xy_sampling_step,
-                gs_z_levels=gs_z_levels
-                )
-            new_free_locs_sim = gs_slam.explr_map.origin + new_free_voxels * gs_slam.explr_map.voxel_size
+                gs_z_levels=gs_z_levels,
+            )
+            new_free_locs_sim = (
+                gs_slam.explr_map.origin
+                + new_free_voxels * gs_slam.explr_map.voxel_size
+            )
 
             ### update previous_free_grid ###
             gs_z_levels = self.gs_z_levels[self.exploration_stage]
             xy_sampling_step = self.planner_cfg.xy_sampling_step[self.exploration_stage]
             gs_slam.explr_map.update_prev_free_voxels(
-                use_xyz_filter=True, 
+                use_xyz_filter=True,
                 xy_sampling_step=xy_sampling_step,
-                gs_z_levels=gs_z_levels
-                )
+                gs_z_levels=gs_z_levels,
+            )
 
             ##################################################
             ### sample new candidates
@@ -1094,13 +1188,18 @@ class ActiveGSPlannerv2(NarutoPlanner):
             ### sample poses (SplaTAM system) from free space ###
             if new_free_locs_sim.shape[0] != 0:
                 new_cand_poses = self.generate_candidate_poses(
-                                        new_free_locs_sim, 
-                                        gs_slam.explr_map.sim2slam
-                                        ).reshape(-1, 4, 4)
+                    new_free_locs_sim, gs_slam.explr_map.sim2slam
+                ).reshape(-1, 4, 4)
 
-                free_vxl_idx_exp = new_free_voxels.unsqueeze(1).repeat(1, self.num_dir_samples[self.exploration_stage], 1)
-                view_rot_idx_exp = self.view_rot_idx[self.exploration_stage].repeat(new_free_voxels.shape[0], 1, 1)
-                new_cand_pose_key = torch.cat([free_vxl_idx_exp, view_rot_idx_exp], dim=-1).reshape(-1, 4)
+                free_vxl_idx_exp = new_free_voxels.unsqueeze(1).repeat(
+                    1, self.num_dir_samples[self.exploration_stage], 1
+                )
+                view_rot_idx_exp = self.view_rot_idx[self.exploration_stage].repeat(
+                    new_free_voxels.shape[0], 1, 1
+                )
+                new_cand_pose_key = torch.cat(
+                    [free_vxl_idx_exp, view_rot_idx_exp], dim=-1
+                ).reshape(-1, 4)
 
                 self.add_explore_pool_cand(new_cand_poses, new_cand_pose_key)
 
@@ -1113,41 +1212,55 @@ class ActiveGSPlannerv2(NarutoPlanner):
                 is_explore_done = True
                 self.info_printer(
                     f"Current state: {self.state} | {self.planning_state}: Run out maximum exploration steps - {self.exploration_stage} , starting evaluation...",
-                    self.step, self.__class__.__name__)
-            
+                    self.step,
+                    self.__class__.__name__,
+                )
+
             ### FIXME: debug ###
             # is_explore_done = self.step > 50
             # if self.step > 50:
             #     self.gs_slam.print_and_save_result("exploration")
-            
+
             ##################################################
             ### Evaluation when exploration is just done
             ##################################################
 
             if is_explore_done:
                 if self.exploration_stage < self.num_exploration_stage:
-                    self.info_printer(f"Current state: {self.state} | {self.planning_state}: Done Exploration Stage - {self.exploration_stage} , starting evaluation...", self.step, self.__class__.__name__)
+                    self.info_printer(
+                        f"Current state: {self.state} | {self.planning_state}: Done Exploration Stage - {self.exploration_stage} , starting evaluation...",
+                        self.step,
+                        self.__class__.__name__,
+                    )
                     eval_dir_suffix = f"exploration_stage_{self.exploration_stage}"
-                    self.gs_slam.print_and_save_result(eval_dir_suffix, is_prune_gaussians=False, ignore_first_frame=True)
+                    self.gs_slam.print_and_save_result(
+                        eval_dir_suffix,
+                        is_prune_gaussians=False,
+                        ignore_first_frame=True,
+                    )
                     ### save step  ###
                     eval_dir = self.gs_slam.eval_dir + "_" + eval_dir_suffix
                     os.makedirs(eval_dir, exist_ok=True)
-                    with open(os.path.join(eval_dir, "exploration_info.txt"), 'w') as f:
+                    with open(os.path.join(eval_dir, "exploration_info.txt"), "w") as f:
                         line = f"exploration_stage_{self.exploration_stage}_step: {self.step}\n"
                         f.writelines(line)
 
                         line = "global_keyframe: "
                         f.writelines(line)
-                        
+
                         if self.main_cfg.slam.use_global_keyframe:
                             line = f"{sorted(self.gs_slam.global_keyframe_indices)}\n"
                             f.writelines(line)
 
                     self.exploration_stage += 1
                     self.planning_state = "exploration"
-                
+
                 if self.exploration_stage == self.num_exploration_stage:
-                    self.info_printer(f"Current state: {self.state} | {self.planning_state}: Done All Exploration.", self.step, self.__class__.__name__)
+                    self.info_printer(
+                        f"Current state: {self.state} | {self.planning_state}: Done All Exploration.",
+                        self.step,
+                        self.__class__.__name__,
+                    )
                     if self.main_cfg.slam.use_global_keyframe:
                         self.planning_state = "post_refinement"
                         self.post_refine_counter = 0
@@ -1156,13 +1269,20 @@ class ActiveGSPlannerv2(NarutoPlanner):
                 else:
                     ### reset exploration map ###
                     gs_z_levels = self.gs_z_levels[self.exploration_stage]
-                    xy_sampling_step = self.planner_cfg.xy_sampling_step[self.exploration_stage]
-                    gs_slam.explr_map.prev_free_voxels = torch.empty(0, 3).to(self.device)
-                
+                    xy_sampling_step = self.planner_cfg.xy_sampling_step[
+                        self.exploration_stage
+                    ]
+                    gs_slam.explr_map.prev_free_voxels = torch.empty(0, 3).to(
+                        self.device
+                    )
 
             # if not(is_explore_done):
             else:
-                self.info_printer(f"Current state: {self.state} | {self.planning_state}: Evaluate Exploration Candidate I.G.", self.step, self.__class__.__name__)
+                self.info_printer(
+                    f"Current state: {self.state} | {self.planning_state}: Evaluate Exploration Candidate I.G.",
+                    self.step,
+                    self.__class__.__name__,
+                )
                 self.planning_state = "exploration"
                 ### Get EXPLORE POOL poses and keys ###
                 cand_poses, cand_keys = self.get_explore_pool_poses()
@@ -1171,12 +1291,14 @@ class ActiveGSPlannerv2(NarutoPlanner):
                 seman_entropies = []
 
                 ### compute distance between current pose and candidate poses ###
-                dists = torch.norm(cand_poses[:, :3, 3] - cur_pose[:3, 3], dim=1) + 1e-6 # avoid zero dist case
+                dists = (
+                    torch.norm(cand_poses[:, :3, 3] - cur_pose[:3, 3], dim=1) + 1e-6
+                )  # avoid zero dist case
                 dists_sm = torch.nn.functional.softmax(dists, dim=0)
                 for i, cand_pose in enumerate(cand_poses):
                     ### render data from candidate pose ###
                     img, depth, valid_mask, seen = gs_slam.render(cand_pose)
-                    _, logits = gs_slam.render_semantic(cand_pose,seen)
+                    _, logits = gs_slam.render_semantic(cand_pose, seen)
                     # valid_entropy_mask = valid_mask[0].clone()
 
                     ##################################################
@@ -1184,14 +1306,19 @@ class ActiveGSPlannerv2(NarutoPlanner):
                     # FIXME: this simulation is time consuming.
                     # However, it is not related to our method but the imperfect simulation data.
                     ##################################################
-                    depth_gt = self.sim.simulate(self.pose_conversion_slam2sim(cand_pose).detach().cpu().numpy(), no_print=True)['depth']
-                    valid_sim_mask = depth_gt > 0.2 # 0.0 / 0.2 is the value that ignore rendering
+                    depth_gt = self.sim.simulate(
+                        self.pose_conversion_slam2sim(cand_pose).detach().cpu().numpy(),
+                        no_print=True,
+                    )["depth"]
+                    valid_sim_mask = (
+                        depth_gt > 0.2
+                    )  # 0.0 / 0.2 is the value that ignore rendering
                     valid_mask[0][~valid_sim_mask] = True
 
                     _, self.img_h, self.img_w = img.shape
 
                     ### compute EXPLORE I.G. ###
-                    explore_ig = (valid_mask==0).sum()
+                    explore_ig = (valid_mask == 0).sum()
                     explore_igs.append(explore_ig)
 
                     ### semantic information
@@ -1201,15 +1328,21 @@ class ActiveGSPlannerv2(NarutoPlanner):
 
                 ### compute weighted exploration I.G., weighted by distance ###
                 explore_igs = torch.stack(explore_igs).float()
-                explore_igs_sm = torch.nn.functional.softmax(torch.log(explore_igs), dim=0)
+                explore_igs_sm = torch.nn.functional.softmax(
+                    torch.log(explore_igs), dim=0
+                )
 
                 ### semantic entropy
                 seman_entropies = torch.stack(seman_entropies).float()
                 seman_entropies_sm = seman_entropies
-                seman_entropies_sm[seman_entropies != 1] = torch.nn.functional.softmax(seman_entropies[seman_entropies != 1], dim=0)
+                seman_entropies_sm[seman_entropies != 1] = torch.nn.functional.softmax(
+                    seman_entropies[seman_entropies != 1], dim=0
+                )
 
                 # weighted_explore_igs = (1 - dists_sm) * (explore_igs_sm + recognize_igs_sm) * seman_entropies_sm
-                weighted_explore_igs = (1 - dists_sm) * explore_igs_sm * seman_entropies_sm
+                weighted_explore_igs = (
+                    (1 - dists_sm) * explore_igs_sm * seman_entropies_sm
+                )
                 next_visit = torch.argmax(weighted_explore_igs).item()
                 new_pose = cand_poses[next_visit]
                 # print("Best pose px num: ", explore_igs[torch.argmax(weighted_explore_igs)])
@@ -1218,23 +1351,45 @@ class ActiveGSPlannerv2(NarutoPlanner):
                 self.update_explore_pool_cand(explore_igs, cand_keys, next_visit)
 
                 ### remove explored view from EXPLORE POOL
-                self.del_explore_pool_cand(explore_igs, cand_keys, self.planner_cfg.explore_thre,self.planner_cfg.recognize_thre)
-                self.info_printer(f"Current state: {self.state} [Exploration Pool: {len(self.explore_pool)}]", self.step, self.__class__.__name__)
-                self.info_printer(f"                            Exploration I.G.   : {explore_igs}", self.step, self.__class__.__name__)
-                self.info_printer(f"                            Semantic Entropy   : {seman_entropies}", self.step,
-                              self.__class__.__name__)
+                self.del_explore_pool_cand(
+                    explore_igs,
+                    cand_keys,
+                    self.planner_cfg.explore_thre,
+                    self.planner_cfg.recognize_thre,
+                )
+                self.info_printer(
+                    f"Current state: {self.state} [Exploration Pool: {len(self.explore_pool)}]",
+                    self.step,
+                    self.__class__.__name__,
+                )
+                self.info_printer(
+                    f"                            Exploration I.G.   : {explore_igs}",
+                    self.step,
+                    self.__class__.__name__,
+                )
+                self.info_printer(
+                    f"                            Semantic Entropy   : {seman_entropies}",
+                    self.step,
+                    self.__class__.__name__,
+                )
         ##################################################
         ### Refinement
         ##################################################
         if self.planning_state == "refinement":
-            self.info_printer(f"Current state: {self.state} | {self.planning_state}: Evaluate Refinement Candidate I.G.", self.step, self.__class__.__name__)
+            self.info_printer(
+                f"Current state: {self.state} | {self.planning_state}: Evaluate Refinement Candidate I.G.",
+                self.step,
+                self.__class__.__name__,
+            )
             self.planning_state = "refinement"
             ### get new keyframe and update prev keyframe###
             new_kfs = self.gs_slam.get_new_keyframe_idxs()
             self.gs_slam.update_prev_keyframes()
 
             ### update REFINE_POOL (add new keyframes to REFINE_POOL) ###
-            selected_kf_list = [elem for elem, mask in zip(self.gs_slam.keyframe_list, new_kfs) if mask]
+            selected_kf_list = [
+                elem for elem, mask in zip(self.gs_slam.keyframe_list, new_kfs) if mask
+            ]
             self.add_refine_pool_cand(selected_kf_list)
 
             ### render poses in REFINE_POOL ###
@@ -1245,21 +1400,31 @@ class ActiveGSPlannerv2(NarutoPlanner):
             # TODO: add one more igs for miou
 
             ### compute distance between current pose and candidate poses ###
-            dists = torch.norm(cand_poses[:, :3, 3] - cur_pose[:3, 3], dim=1) + 1e-6 # avoid zero dist case
+            dists = (
+                torch.norm(cand_poses[:, :3, 3] - cur_pose[:3, 3], dim=1) + 1e-6
+            )  # avoid zero dist case
             dists_sm = torch.nn.functional.softmax(dists, dim=0)
             for i, cand_pose in enumerate(cand_poses):
-                color, depth, valid_mask,seen = gs_slam.render(cand_pose)
+                color, depth, valid_mask, seen = gs_slam.render(cand_pose)
                 cls_ids, logits = gs_slam.render_semantic(cand_pose, seen)
 
                 ### compute REFINE I.G. ###
-                valid_depth_mask = cand_data[i]['depth'] > 0
-                color_ig = calc_psnr(color*valid_depth_mask, cand_data[i]['color']*valid_depth_mask).mean()
+                valid_depth_mask = cand_data[i]["depth"] > 0
+                color_ig = calc_psnr(
+                    color * valid_depth_mask, cand_data[i]["color"] * valid_depth_mask
+                ).mean()
                 color_igs.append(color_ig)
-                depth_ig = (torch.abs(depth*valid_depth_mask - cand_data[i]['depth']*valid_depth_mask)/(cand_data[i]['depth']+1e-8)).sum() / valid_depth_mask.sum() 
+                depth_ig = (
+                    torch.abs(
+                        depth * valid_depth_mask
+                        - cand_data[i]["depth"] * valid_depth_mask
+                    )
+                    / (cand_data[i]["depth"] + 1e-8)
+                ).sum() / valid_depth_mask.sum()
                 depth_igs.append(depth_ig)
 
                 # TODO: add semantic ig
-                seman_ig = calc_shannon_entropy(logits*valid_depth_mask,dim=0).mean()
+                seman_ig = calc_shannon_entropy(logits * valid_depth_mask, dim=0).mean()
                 seman_igs.append(seman_ig)
 
             ### compute weighted Refinement I.G., weighted by distance ###
@@ -1275,19 +1440,33 @@ class ActiveGSPlannerv2(NarutoPlanner):
 
             ### remove refined views from REFINE_POOL ###
             self.del_refine_pool_cand(
-                color_igs, 
+                color_igs,
                 depth_igs,
                 seman_igs,
                 cand_keys,
-                self.planner_cfg.color_ig_thre, 
+                self.planner_cfg.color_ig_thre,
                 self.planner_cfg.depth_ig_thre,
                 self.planner_cfg.seman_ig_thre,
-                )
-            self.info_printer(f"Refinement CandKey: {cand_keys}", self.step, self.__class__.__name__)
-            self.info_printer(f"Refinement ColorIG: {color_igs}", self.step, self.__class__.__name__)
-            self.info_printer(f"Refinement DepthIG: {depth_igs}", self.step, self.__class__.__name__)
-            self.info_printer(f"Refinement best Cand: {cand_keys[best_key]} | {color_igs[best_key]} | {depth_igs[best_key]} | {refine_igs[best_key]}", self.step, self.__class__.__name__)
-            self.info_printer(f"Current state: {self.state} [Refinement Pool: {len(self.refine_pool)}]", self.step, self.__class__.__name__)
+            )
+            self.info_printer(
+                f"Refinement CandKey: {cand_keys}", self.step, self.__class__.__name__
+            )
+            self.info_printer(
+                f"Refinement ColorIG: {color_igs}", self.step, self.__class__.__name__
+            )
+            self.info_printer(
+                f"Refinement DepthIG: {depth_igs}", self.step, self.__class__.__name__
+            )
+            self.info_printer(
+                f"Refinement best Cand: {cand_keys[best_key]} | {color_igs[best_key]} | {depth_igs[best_key]} | {refine_igs[best_key]}",
+                self.step,
+                self.__class__.__name__,
+            )
+            self.info_printer(
+                f"Current state: {self.state} [Refinement Pool: {len(self.refine_pool)}]",
+                self.step,
+                self.__class__.__name__,
+            )
 
             if len(self.refine_pool) == 0:
                 self.planning_state = "post_refinement"
@@ -1300,9 +1479,11 @@ class ActiveGSPlannerv2(NarutoPlanner):
             if self.post_refine_counter >= self.planner_cfg.post_refine_steps:
                 self.planning_state = "done"
             if self.step % self.planner_cfg.post_refinement_eval_freq == 0:
-
-
-                self.info_printer(f"Current state: {self.state} | {self.planning_state}: Evaluate Post-Refinement Candidate I.G.", self.step, self.__class__.__name__)
+                self.info_printer(
+                    f"Current state: {self.state} | {self.planning_state}: Evaluate Post-Refinement Candidate I.G.",
+                    self.step,
+                    self.__class__.__name__,
+                )
                 self.planning_state = "post_refinement"
                 ### get new keyframe and update prev keyframe###
                 # new_kfs = self.gs_slam.get_new_keyframe_idxs()
@@ -1312,7 +1493,10 @@ class ActiveGSPlannerv2(NarutoPlanner):
                 ### FIXME: only use global keyframe ###
                 # selected_kf_list = [elem for elem, mask in zip(self.gs_slam.keyframe_list, new_kfs) if mask]
                 if len(self.refine_pool) == 1:
-                    selected_kf_list = [self.gs_slam.keyframe_list[i] for i in self.gs_slam.global_keyframe_indices]
+                    selected_kf_list = [
+                        self.gs_slam.keyframe_list[i]
+                        for i in self.gs_slam.global_keyframe_indices
+                    ]
                     self.add_refine_pool_cand(selected_kf_list)
 
                 ### render poses in REFINE_POOL ###
@@ -1328,13 +1512,18 @@ class ActiveGSPlannerv2(NarutoPlanner):
                     _, img_h, img_w = color.shape
 
                     ### compute REFINE I.G. ###
-                    valid_depth_mask = cand_data[i]['depth'] > 0
-                    color_ig = calc_psnr(color*valid_depth_mask, cand_data[i]['color']*valid_depth_mask).mean()
+                    valid_depth_mask = cand_data[i]["depth"] > 0
+                    color_ig = calc_psnr(
+                        color * valid_depth_mask,
+                        cand_data[i]["color"] * valid_depth_mask,
+                    ).mean()
                     color_igs.append(color_ig)
 
-                    topk_probs, _ = torch.topk(pred_logits, k=16,dim=0)
-                    recognize_mask = topk_probs.sum(0)>0.5
-                    seman_ig = (recognize_mask & valid_depth_mask).sum()/valid_depth_mask.sum()
+                    topk_probs, _ = torch.topk(pred_logits, k=16, dim=0)
+                    recognize_mask = topk_probs.sum(0) > 0.5
+                    seman_ig = (
+                        recognize_mask & valid_depth_mask
+                    ).sum() / valid_depth_mask.sum()
 
                     seman_igs.append(seman_ig)
 
@@ -1343,48 +1532,76 @@ class ActiveGSPlannerv2(NarutoPlanner):
                 seman_igs = torch.stack(seman_igs).float()
 
                 ### remove refined views from REFINE_POOL ###
-                self.info_printer(f"Current state: {self.state} [Refinement Pool: {len(self.refine_pool)}]", self.step, self.__class__.__name__)
-                self.info_printer(f"Refinement ColorIG: {color_igs}", self.step, self.__class__.__name__)
-                self.info_printer(f"Refinement ColorIG [Min, Avg]: [{torch.min(color_igs).item():.2f}, {torch.mean(color_igs).item():.2f}]", self.step, self.__class__.__name__)
-                self.info_printer(f"Refinement SemanticIG: {seman_igs}", self.step, self.__class__.__name__)
-                self.info_printer(f"Refinement SemanticIG [Min, Avg]: [{torch.min(seman_igs).item():.2f}, {torch.mean(seman_igs).item():.2f}]",
-                    self.step, self.__class__.__name__)
+                self.info_printer(
+                    f"Current state: {self.state} [Refinement Pool: {len(self.refine_pool)}]",
+                    self.step,
+                    self.__class__.__name__,
+                )
+                self.info_printer(
+                    f"Refinement ColorIG: {color_igs}",
+                    self.step,
+                    self.__class__.__name__,
+                )
+                self.info_printer(
+                    f"Refinement ColorIG [Min, Avg]: [{torch.min(color_igs).item():.2f}, {torch.mean(color_igs).item():.2f}]",
+                    self.step,
+                    self.__class__.__name__,
+                )
+                self.info_printer(
+                    f"Refinement SemanticIG: {seman_igs}",
+                    self.step,
+                    self.__class__.__name__,
+                )
+                self.info_printer(
+                    f"Refinement SemanticIG [Min, Avg]: [{torch.min(seman_igs).item():.2f}, {torch.mean(seman_igs).item():.2f}]",
+                    self.step,
+                    self.__class__.__name__,
+                )
                 # if len(self.refine_pool) == 0:
                 ### When 90% of global keyframes are good, then it is done ###
-                color_requirement = (color_igs > self.main_cfg.slam.global_keyframe.color_thre).sum()/len(color_igs) > 0.9
-                seman_requirement = (seman_igs > self.main_cfg.slam.global_keyframe.seman_thre).sum()/len(seman_igs) > 0.9
-
-
+                color_requirement = (
+                    color_igs > self.main_cfg.slam.global_keyframe.color_thre
+                ).sum() / len(color_igs) > 0.9
+                seman_requirement = (
+                    seman_igs > self.main_cfg.slam.global_keyframe.seman_thre
+                ).sum() / len(seman_igs) > 0.9
 
                 if color_requirement & seman_requirement:
                     self.planning_state = "done"
 
         if self.planning_state == "done":
             self.planning_state = "done"
-            self.info_printer(f"Current state: Exploration + Refinement All Done!", self.step, self.__class__.__name__)
-    
+            self.info_printer(
+                f"Current state: Exploration + Refinement All Done!",
+                self.step,
+                self.__class__.__name__,
+            )
+
         out = dict(
-            new_pose = new_pose,
+            new_pose=new_pose,
         )
         return out
 
-    def main(self, 
-             cur_pose       : torch.Tensor,
-             gs_slam,
-             ) -> torch.Tensor:
-        """ Naruto Planner main function
-    
+    def main(
+        self,
+        cur_pose: torch.Tensor,
+        gs_slam,
+    ) -> torch.Tensor:
+        """Naruto Planner main function
+
         Args:
-            gs_slam: 
+            gs_slam:
             cur_pose (torch.Tensor, [4,4]): current pose. Format: camera-to-world, RUB system
             is_new_vols (bool)          : is uncert_sdf_vols new optimized volumes
-    
+
         Returns:
             new_pose (torch.Tensor, [4,4]): new pose. Format: camera-to-world, RUB system
         """
         self.gs_slam = gs_slam
         self.update_state()
-        self.info_printer(f"Current state: {self.state}", self.step, self.__class__.__name__)
+        self.info_printer(
+            f"Current state: {self.state}", self.step, self.__class__.__name__
+        )
         new_pose = self.compute_next_state_pose(cur_pose, gs_slam)
         if type(new_pose) == np.ndarray:
             new_pose = torch.from_numpy(new_pose).float().to(cur_pose.device)

@@ -1,6 +1,7 @@
 import cv2
 import os
 import sys
+
 sys.path.append(os.getcwd())
 from tensorboardX import SummaryWriter
 import torch
@@ -20,17 +21,16 @@ from src.utils.timer import Timer
 from src.utils.general_utils import fix_random_seed, InfoPrinter, update_module_step
 
 
-
-
 import json
 import os
 
+
 def map_object_id_to_semlabel(object_ids, id2label):
-    '''
+    """
 
     :param object_ids: torch.tensor (H,W) # output from habitat-sim, including class id of each pixel
     :return: semantic labels: torch.tensor (H,W) # output from habitat-sim, including class id of each pixel
-    '''
+    """
     id2label = torch.tensor(id2label)
     sem_labels = id2label[object_ids.long()]
     return sem_labels
@@ -54,7 +54,10 @@ def generate_random_colormap(num_classes):
         dict: A dictionary mapping class indices to random RGB colors.
     """
     random.seed(42)  # Set seed for reproducibility
-    colormap = {i: (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255)) for i in range(num_classes)}
+    colormap = {
+        i: (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
+        for i in range(num_classes)
+    }
     return colormap
 
 
@@ -90,7 +93,6 @@ def semantic_mask_to_rgb(mask: torch.Tensor, save_path: str, num_classes=102):
 
 
 if __name__ == "__main__":
-
     info_printer = InfoPrinter("Generate Finetune data")
     timer = Timer()
     info_printer("Parsing arguments...", 0, "Initialization")
@@ -98,38 +100,43 @@ if __name__ == "__main__":
     info_printer("Loading configuration...", 0, "Initialization")
     main_cfg = load_cfg(args)
 
-    #scenes = ["office0", "office1", "office2","room0", "room1","room2", "office3", "office4"]
-    scenes = [ "room2"]
+    # scenes = ["office0", "office1", "office2","room0", "room1","room2", "office3", "office4"]
+    scenes = ["room2"]
 
     ##################################################
     ### argument parsing and load configuration
     ##################################################
     for selected_scene in scenes:
         info_printer("Modifying configuration...", 0, "Initialization")
-        main_cfg.dump(os.path.join(main_cfg.dirs.result_dir, 'main_cfg.json'))
+        main_cfg.dump(os.path.join(main_cfg.dirs.result_dir, "main_cfg.json"))
         info_printer.update_total_step(main_cfg.general.num_iter)
         main_cfg.general.scene = selected_scene
-        main_cfg.dirs.cfg_dir = f'configs/{main_cfg.general.dataset}/{selected_scene}/'
-        main_cfg.sim.habitat_cfg = f'configs/{main_cfg.general.dataset}/{selected_scene}/habitat.py'
+        main_cfg.dirs.cfg_dir = f"configs/{main_cfg.general.dataset}/{selected_scene}/"
+        main_cfg.sim.habitat_cfg = (
+            f"configs/{main_cfg.general.dataset}/{selected_scene}/habitat.py"
+        )
 
         ### for NVS, here need to traj file
-        #main_cfg.planner.SLAMData_dir = os.path.join(main_cfg.dirs.data_dir,main_cfg.general.dataset, main_cfg.general.scene)
-        main_cfg.planner.SLAMData_dir = os.path.join(main_cfg.dirs.data_dir, 'replica_sim_nvs',
-                                                     main_cfg.general.scene)
+        # main_cfg.planner.SLAMData_dir = os.path.join(main_cfg.dirs.data_dir,main_cfg.general.dataset, main_cfg.general.scene)
+        main_cfg.planner.SLAMData_dir = os.path.join(
+            main_cfg.dirs.data_dir, "replica_sim_nvs", main_cfg.general.scene
+        )
 
-        info_printer.update_scene(main_cfg.general.dataset + " - " + main_cfg.general.scene)
+        info_printer.update_scene(
+            main_cfg.general.dataset + " - " + main_cfg.general.scene
+        )
 
         ##########  load in id2label ##############
         ori_dir = f"./data/replica_v1/{main_cfg.general.scene[:-1]}_{main_cfg.general.scene[-1]}/habitat/"
-        ori_semantic_info_file = os.path.join(ori_dir, 'info_semantic.json')
-        with open(ori_semantic_info_file, 'r') as file:
-            scene_id2label = json.load(file)['id_to_label']
+        ori_semantic_info_file = os.path.join(ori_dir, "info_semantic.json")
+        with open(ori_semantic_info_file, "r") as file:
+            scene_id2label = json.load(file)["id_to_label"]
         main_cfg.general.semantic_dir = ori_dir
 
-        img_save_dir = f'./data/replica_sim_nvs/{selected_scene}/results_habitat/'
+        img_save_dir = f"./data/replica_sim_nvs/{selected_scene}/results_habitat/"
         os.makedirs(img_save_dir, exist_ok=True)
-        os.makedirs(f'{img_save_dir}/rgb', exist_ok=True)
-        os.makedirs(f'{img_save_dir}/semantic', exist_ok=True)
+        os.makedirs(f"{img_save_dir}/rgb", exist_ok=True)
+        os.makedirs(f"{img_save_dir}/semantic", exist_ok=True)
 
         ##################################################
         ### Fix random seed
@@ -142,7 +149,7 @@ if __name__ == "__main__":
         ##################################################
         log_savedir = os.path.join(main_cfg.dirs.result_dir, "logger")
         os.makedirs(log_savedir, exist_ok=True)
-        logger = SummaryWriter(f'{log_savedir}')
+        logger = SummaryWriter(f"{log_savedir}")
 
         ##################################################
         ### initialize simulator
@@ -166,14 +173,17 @@ if __name__ == "__main__":
 
         ## initialize first pose ##
         T_sim2slam = torch.inverse(
-            c2w_slam_init)  # RDF # transformation that takes sim-world points to slam-world-origin (i.e. first camera)
-        planner.init_data(T_sim2slam) # 'PreTrajPlanner' object has no attribute 'init_data'
+            c2w_slam_init
+        )  # RDF # transformation that takes sim-world points to slam-world-origin (i.e. first camera)
+        planner.init_data(
+            T_sim2slam
+        )  # 'PreTrajPlanner' object has no attribute 'init_data'
         planner.timer = timer
 
         step_size = 1
         total_poses = len(planner.pose_loader.predefined_traj)
         if total_poses > main_cfg.general.num_iter:
-            step_size = total_poses//main_cfg.general.num_iter
+            step_size = total_poses // main_cfg.general.num_iter
 
         for i in range(total_poses):
             update_module_step(i, [sim, planner])
@@ -201,19 +211,25 @@ if __name__ == "__main__":
                 sim_out_rgb = sim.simulate(c2w_sim_rgb, return_semantic=True)
                 sim_out_seman = sim.simulate(c2w_sim_seman, return_semantic=True)
                 sim_out = {
-                    'color': sim_out_rgb['color'],
-                    'seman': sim_out_seman['seman'],
+                    "color": sim_out_rgb["color"],
+                    "seman": sim_out_seman["seman"],
                 }
 
-                #sim_out = sim.simulate(c2w_sim, return_semantic=True, return_erp=True)
+                # sim_out = sim.simulate(c2w_sim, return_semantic=True, return_erp=True)
                 timer.end("Simulation")
-                color = sim_out['color']
+                color = sim_out["color"]
                 to_pil = transforms.ToPILImage()
                 image = to_pil(color.permute(2, 0, 1))
                 image.save(f"{img_save_dir}/rgb/color_{i:04d}.jpg")
 
-                seman = sim_out['seman'].long()
-                seman = map_object_id_to_semlabel(object_ids=sim_out['seman'],id2label=scene_id2label)
-                np.save(f"{img_save_dir}/semantic/semantic_map_{i:04d}.npy", seman.numpy())
+                seman = sim_out["seman"].long()
+                seman = map_object_id_to_semlabel(
+                    object_ids=sim_out["seman"], id2label=scene_id2label
+                )
+                np.save(
+                    f"{img_save_dir}/semantic/semantic_map_{i:04d}.npy", seman.numpy()
+                )
                 seman[seman < 0] = 0
-                semantic_mask_to_rgb(seman, f"{img_save_dir}/semantic/semantic_rgb_{i:04d}.png")
+                semantic_mask_to_rgb(
+                    seman, f"{img_save_dir}/semantic/semantic_rgb_{i:04d}.png"
+                )

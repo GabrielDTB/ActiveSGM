@@ -5,6 +5,7 @@ import multiprocessing as mp
 from plyfile import PlyData, PlyElement
 from tqdm import tqdm
 
+
 def compute_close_points(cloud1, cloud2, th):
     """Computes the inlier indices for cloud2.
 
@@ -24,35 +25,36 @@ def compute_close_points(cloud1, cloud2, th):
 
 def sample_single_tri(input_):
     n1, n2, v1, v2, tri_vert = input_
-    c = np.mgrid[:n1+1, :n2+1]
+    c = np.mgrid[: n1 + 1, : n2 + 1]
     c += 0.5
     c[0] /= max(n1, 1e-7)
     c[1] /= max(n2, 1e-7)
-    c = np.transpose(c, (1,2,0))
+    c = np.transpose(c, (1, 2, 0))
     k = c[c.sum(axis=-1) < 1]  # m2
-    q = v1 * k[:,:1] + v2 * k[:,1:] + tri_vert
+    q = v1 * k[:, :1] + v2 * k[:, 1:] + tri_vert
     return q
 
 
 if __name__ == "__main__":
-
-    dataset = 'MP3D'
-    scenes = ["GdvgFV5R1Z5","gZ6f7yhEvPG","HxpKQynjfin","pLe4wQe7qrG","YmJkqBEsHnH"]
+    dataset = "MP3D"
+    scenes = ["GdvgFV5R1Z5", "gZ6f7yhEvPG", "HxpKQynjfin", "pLe4wQe7qrG", "YmJkqBEsHnH"]
     sample_ref_mesh = True
     threshold = 0.1
     for scene in scenes:
-        source_mesh_file = f'./data/{dataset}/v1/scans/{scene}/mesh.obj'
-        semantic_ply_file = f'./data/{dataset}/v1/tasks/mp3d/{scene}/{scene}_semantic.ply'
+        source_mesh_file = f"./data/{dataset}/v1/scans/{scene}/mesh.obj"
+        semantic_ply_file = (
+            f"./data/{dataset}/v1/tasks/mp3d/{scene}/{scene}_semantic.ply"
+        )
 
         gt_mesh = o3d.io.read_triangle_mesh(source_mesh_file)
         gt_pc = gt_mesh.sample_points_uniformly(number_of_points=50000)
         gt_kdtree = o3d.geometry.KDTreeFlann(gt_pc)
 
         ply = PlyData.read(semantic_ply_file)
-        vertices = ply['vertex'].data
-        faces = ply['face'].data
+        vertices = ply["vertex"].data
+        faces = ply["face"].data
 
-        v_xyz = np.stack([vertices['x'], vertices['y'], vertices['z']], axis=-1)
+        v_xyz = np.stack([vertices["x"], vertices["y"], vertices["z"]], axis=-1)
 
         keep_mask = np.zeros(len(v_xyz), dtype=bool)
         for i, pt in enumerate(tqdm(v_xyz, desc="Checking vertex proximity")):
@@ -79,10 +81,11 @@ if __name__ == "__main__":
         face_dtype = faces.dtype
         filtered_faces = np.array(valid_faces, dtype=face_dtype)
 
-        vertex_el = PlyElement.describe(filtered_vertices, 'vertex')
-        face_el = PlyElement.describe(filtered_faces, 'face')
+        vertex_el = PlyElement.describe(filtered_vertices, "vertex")
+        face_el = PlyElement.describe(filtered_faces, "face")
 
-        output_ply_file = f'./data/{dataset}/v1/tasks/mp3d/{scene}/semantic_clean.ply'
+        output_ply_file = f"./data/{dataset}/v1/tasks/mp3d/{scene}/semantic_clean.ply"
         PlyData([vertex_el, face_el], text=False).write(output_ply_file)
         print(
-            f"Cleaned semantic mesh saved to {output_ply_file} with {len(filtered_vertices)} vertices and {len(filtered_faces)} faces.")
+            f"Cleaned semantic mesh saved to {output_ply_file} with {len(filtered_vertices)} vertices and {len(filtered_faces)} faces."
+        )

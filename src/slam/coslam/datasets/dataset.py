@@ -42,23 +42,32 @@ def get_dataset_extra(config: Dict) -> Dataset:
     Returns:
         Dataset: Dataset object
     """
-    if config['dataset'] == "replica":
+    if config["dataset"] == "replica":
         dataset = ReplicaDataset
-    elif config['dataset'] == "mp3d":
+    elif config["dataset"] == "mp3d":
         dataset = MP3DDataset
-    elif config['dataset'] == "NARUTO":
+    elif config["dataset"] == "NARUTO":
         dataset = NARUTODataset
-    return dataset(config, 
-                config['data']['datadir'], 
-                trainskip=config['data']['trainskip'], 
-                downsample_factor=config['data']['downsample'], 
-                sc_factor=config['data']['sc_factor'])
+    return dataset(
+        config,
+        config["data"]["datadir"],
+        trainskip=config["data"]["trainskip"],
+        downsample_factor=config["data"]["downsample"],
+        sc_factor=config["data"]["sc_factor"],
+    )
 
 
 class ReplicaDataset(BaseDataset):
-    def __init__(self, cfg, basedir, trainskip=1, 
-                 downsample_factor=1, translation=0.0, 
-                 sc_factor=1., crop=0):
+    def __init__(
+        self,
+        cfg,
+        basedir,
+        trainskip=1,
+        downsample_factor=1,
+        translation=0.0,
+        sc_factor=1.0,
+        crop=0,
+    ):
         super(ReplicaDataset, self).__init__(cfg)
 
         self.basedir = basedir
@@ -73,31 +82,32 @@ class ReplicaDataset(BaseDataset):
         # self.depth_paths = sorted(
         #     glob.glob(f'{self.basedir}/results/depth*.png'))
         # self.load_poses(os.path.join(self.basedir, 'traj.txt'))
-        
+
         self.rays_d = None
         self.tracking_mask = None
         self.frame_ids = range(0, len(self.img_files))
         self.num_frames = len(self.frame_ids)
-    
+
     def __len__(self):
         return self.num_frames
 
-    
     def __getitem__(self, index):
         color_path = self.img_files[index]
         depth_path = self.depth_paths[index]
 
         color_data = cv2.imread(color_path)
-        if '.png' in depth_path:
+        if ".png" in depth_path:
             depth_data = cv2.imread(depth_path, cv2.IMREAD_UNCHANGED)
-        elif '.exr' in depth_path:
+        elif ".exr" in depth_path:
             raise NotImplementedError()
         if self.distortion is not None:
             raise NotImplementedError()
 
         color_data = cv2.cvtColor(color_data, cv2.COLOR_BGR2RGB)
-        color_data = color_data / 255.
-        depth_data = depth_data.astype(np.float32) / self.png_depth_scale * self.sc_factor
+        color_data = color_data / 255.0
+        depth_data = (
+            depth_data.astype(np.float32) / self.png_depth_scale * self.sc_factor
+        )
 
         H, W = depth_data.shape
         color_data = cv2.resize(color_data, (W, H))
@@ -109,14 +119,16 @@ class ReplicaDataset(BaseDataset):
             depth_data = cv2.resize(depth_data, (W, H), interpolation=cv2.INTER_NEAREST)
 
         if self.rays_d is None:
-            self.rays_d = get_camera_rays(self.H, self.W, self.fx, self.fy, self.cx, self.cy)
+            self.rays_d = get_camera_rays(
+                self.H, self.W, self.fx, self.fy, self.cx, self.cy
+            )
 
         color_data = torch.from_numpy(color_data.astype(np.float32))
         depth_data = torch.from_numpy(depth_data.astype(np.float32))
 
         ret = {
             "frame_id": self.frame_ids[index],
-            "c2w":  self.poses[index],
+            "c2w": self.poses[index],
             "rgb": color_data,
             "depth": depth_data,
             "direction": self.rays_d,
@@ -126,9 +138,16 @@ class ReplicaDataset(BaseDataset):
 
 
 class MP3DDataset(BaseDataset):
-    def __init__(self, cfg, basedir, trainskip=1, 
-                 downsample_factor=1, translation=0.0, 
-                 sc_factor=1., crop=0):
+    def __init__(
+        self,
+        cfg,
+        basedir,
+        trainskip=1,
+        downsample_factor=1,
+        translation=0.0,
+        sc_factor=1.0,
+        crop=0,
+    ):
         super(MP3DDataset, self).__init__(cfg)
 
         self.basedir = basedir
@@ -144,26 +163,27 @@ class MP3DDataset(BaseDataset):
         self.tracking_mask = None
         self.frame_ids = range(0, len(self.img_files))
         self.num_frames = len(self.frame_ids)
-    
+
     def __len__(self):
         return self.num_frames
 
-    
     def __getitem__(self, index):
         color_path = self.img_files[index]
         depth_path = self.depth_paths[index]
 
         color_data = cv2.imread(color_path)
-        if '.png' in depth_path:
+        if ".png" in depth_path:
             depth_data = cv2.imread(depth_path, cv2.IMREAD_UNCHANGED)
-        elif '.exr' in depth_path:
+        elif ".exr" in depth_path:
             raise NotImplementedError()
         if self.distortion is not None:
             raise NotImplementedError()
 
         color_data = cv2.cvtColor(color_data, cv2.COLOR_BGR2RGB)
-        color_data = color_data / 255.
-        depth_data = depth_data.astype(np.float32) / self.png_depth_scale * self.sc_factor
+        color_data = color_data / 255.0
+        depth_data = (
+            depth_data.astype(np.float32) / self.png_depth_scale * self.sc_factor
+        )
 
         H, W = depth_data.shape
         color_data = cv2.resize(color_data, (W, H))
@@ -175,21 +195,22 @@ class MP3DDataset(BaseDataset):
             depth_data = cv2.resize(depth_data, (W, H), interpolation=cv2.INTER_NEAREST)
 
         if self.rays_d is None:
-            self.rays_d = get_camera_rays(self.H, self.W, self.fx, self.fy, self.cx, self.cy)
+            self.rays_d = get_camera_rays(
+                self.H, self.W, self.fx, self.fy, self.cx, self.cy
+            )
 
         color_data = torch.from_numpy(color_data.astype(np.float32))
         depth_data = torch.from_numpy(depth_data.astype(np.float32))
 
         ret = {
             "frame_id": self.frame_ids[index],
-            "c2w":  self.poses[index],
+            "c2w": self.poses[index],
             "rgb": color_data,
             "depth": depth_data,
             "direction": self.rays_d,
         }
 
         return ret
-
 
     def load_poses(self, path):
         self.poses = []
@@ -204,11 +225,18 @@ class MP3DDataset(BaseDataset):
             c2w = torch.from_numpy(c2w).float()
             self.poses.append(c2w)
 
-        
+
 class NARUTODataset(MP3DDataset):
-    def __init__(self, cfg, basedir, trainskip=1, 
-                 downsample_factor=1, translation=0.0, 
-                 sc_factor=1., crop=0):
-        super(NARUTODataset, self).__init__(cfg, basedir, trainskip, 
-                 downsample_factor, translation, 
-                 sc_factor, crop)
+    def __init__(
+        self,
+        cfg,
+        basedir,
+        trainskip=1,
+        downsample_factor=1,
+        translation=0.0,
+        sc_factor=1.0,
+        crop=0,
+    ):
+        super(NARUTODataset, self).__init__(
+            cfg, basedir, trainskip, downsample_factor, translation, sc_factor, crop
+        )

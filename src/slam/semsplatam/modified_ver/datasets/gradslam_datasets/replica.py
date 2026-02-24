@@ -10,6 +10,7 @@ from natsort import natsorted
 from third_parties.splatam.datasets.gradslam_datasets.basedataset import GradSLAMDataset
 import imageio
 
+
 class ReplicaDataset(GradSLAMDataset):
     def __init__(
         self,
@@ -45,21 +46,27 @@ class ReplicaDataset(GradSLAMDataset):
         if self.load_semantics:
             self.semantic_paths = self.get_semantic_filepaths()
 
-
     def get_filepaths(self):
-        color_paths = natsorted(glob.glob(f"{self.input_folder}/results_habitat/frame*.jpg"))
-        depth_paths = natsorted(glob.glob(f"{self.input_folder}/results_habitat/depth*.png"))
+        color_paths = natsorted(
+            glob.glob(f"{self.input_folder}/results_habitat/frame*.jpg")
+        )
+        depth_paths = natsorted(
+            glob.glob(f"{self.input_folder}/results_habitat/depth*.png")
+        )
         embedding_paths = None
         if self.load_embeddings:
-            embedding_paths = natsorted(glob.glob(f"{self.input_folder}/{self.embedding_dir}/*.pt"))
+            embedding_paths = natsorted(
+                glob.glob(f"{self.input_folder}/{self.embedding_dir}/*.pt")
+            )
         return color_paths, depth_paths, embedding_paths
 
     def get_semantic_filepaths(self):
         semantic_paths = None
         if self.load_semantics:
-            semantic_paths = natsorted(glob.glob(f"{self.input_folder}/results_habitat/semantic/semantic*.npy"))
+            semantic_paths = natsorted(
+                glob.glob(f"{self.input_folder}/results_habitat/semantic/semantic*.npy")
+            )
         return semantic_paths
-
 
     def load_poses(self):
         poses = []
@@ -83,10 +90,8 @@ class ReplicaDataset(GradSLAMDataset):
         semantic_map[semantic_map < 0] = 0
         return semantic_map
 
-    def get_semantic_map(self,index):
+    def get_semantic_map(self, index):
         semantic_path = self.semantic_paths[index]
         semantics = self.read_semantic_from_file(semantic_path)
         semantics = torch.from_numpy(semantics)
-        return semantics.to(self.device).type(self.dtype),
-
-    
+        return (semantics.to(self.device).type(self.dtype),)

@@ -22,27 +22,23 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 
-
 import mmengine
 
 from src.utils.general_utils import InfoPrinter
 
 
-class Simulator():
-    def __init__(self, 
-                 main_cfg: mmengine.Config,
-                 info_printer: InfoPrinter
-                 ) -> None:
+class Simulator:
+    def __init__(self, main_cfg: mmengine.Config, info_printer: InfoPrinter) -> None:
         """
         Args:
             main_cfg (mmengine.Config): Configuration
             info_printer (InfoPrinter): information printer
-    
+
         Attributes:
             main_cfg (mmengine.Config): configurations
             sim_cfg (mmengine.Config) : simulator configurations
             info_printer (InfoPrinter): information printer
-            
+
         """
         self.main_cfg = main_cfg
         self.sim_cfg = main_cfg.sim
@@ -50,10 +46,10 @@ class Simulator():
         self.step = 0
 
     def update_step(self, step):
-        """ update step information
-    
+        """update step information
+
         Args:
             step (int): step size
-    
+
         """
         self.step = step

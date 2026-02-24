@@ -1,5 +1,6 @@
 import os
 import sys
+
 sys.path.append(os.getcwd())
 from tensorboardX import SummaryWriter
 
@@ -13,6 +14,7 @@ from src.utils.general_utils import fix_random_seed, InfoPrinter, update_module_
 from src.visualization import init_visualizer
 import argparse
 
+
 def argument_parsing() -> argparse.Namespace:
     """parse arguments
 
@@ -20,21 +22,29 @@ def argument_parsing() -> argparse.Namespace:
         args: arguments
 
     """
-    parser = argparse.ArgumentParser(
-        description="Arguments to run NARUTO."
+    parser = argparse.ArgumentParser(description="Arguments to run NARUTO.")
+    parser.add_argument(
+        "--cfg", type=str, default="configs/default.py", help="NARUTO config"
     )
-    parser.add_argument("--cfg", type=str, default="configs/default.py",
-                        help="NARUTO config")
-    parser.add_argument("--result_dir", type=str, default=None,
-                        help="result directory")
-    parser.add_argument("--seed", type=int, default=None,
-                        help="random seed; also used as the initial pose idx for Replica")
-    parser.add_argument("--enable_vis", type=int, default=None,
-                        help="enable visualization. 1: True, 0: False")
-    parser.add_argument("--stage", type=str, default='final',
-                        help="ONLY for SplaTAM result evaluation ")
-    parser.add_argument("--step", type=int, default=1100,
-                        help="ONLY for SplaTAM result evaluation ")
+    parser.add_argument("--result_dir", type=str, default=None, help="result directory")
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=None,
+        help="random seed; also used as the initial pose idx for Replica",
+    )
+    parser.add_argument(
+        "--enable_vis",
+        type=int,
+        default=None,
+        help="enable visualization. 1: True, 0: False",
+    )
+    parser.add_argument(
+        "--stage", type=str, default="final", help="ONLY for SplaTAM result evaluation "
+    )
+    parser.add_argument(
+        "--step", type=int, default=1100, help="ONLY for SplaTAM result evaluation "
+    )
     args = parser.parse_args()
     return args
 
@@ -50,7 +60,7 @@ if __name__ == "__main__":
     args = argument_parsing()
     info_printer("Loading configuration...", 0, "Initialization")
     main_cfg = load_cfg(args)
-    main_cfg.dump(os.path.join(main_cfg.dirs.result_dir, 'main_cfg.json'))
+    main_cfg.dump(os.path.join(main_cfg.dirs.result_dir, "main_cfg.json"))
     info_printer.update_total_step(main_cfg.general.num_iter)
     info_printer.update_scene(main_cfg.general.dataset + " - " + main_cfg.general.scene)
 
@@ -65,23 +75,26 @@ if __name__ == "__main__":
     ##################################################
     log_savedir = os.path.join(main_cfg.dirs.result_dir, "logger")
     os.makedirs(log_savedir, exist_ok=True)
-    logger = SummaryWriter(f'{log_savedir}')
+    logger = SummaryWriter(f"{log_savedir}")
 
     ##################################################
     ### initialize SLAM module
     ##################################################
     slam = init_SLAM_model(main_cfg, info_printer, logger)
-    slam.load_params_by_step(step=args.step,stage=args.stage)
+    slam.load_params_by_step(step=args.step, stage=args.stage)
 
     ##################################################
     ### Save Final Mesh and Checkpoint
     ##################################################
     # slam.print_and_save_result()
-    if main_cfg.general.dataset in ['MP3D']:
-        slam.eval_semantic_result_mp3d(eval_dir_suffix=args.stage, ignore_first_frame=True, save_frames=True)
+    if main_cfg.general.dataset in ["MP3D"]:
+        slam.eval_semantic_result_mp3d(
+            eval_dir_suffix=args.stage, ignore_first_frame=True, save_frames=True
+        )
     else:
-        slam.eval_semantic_result(eval_dir_suffix=args.stage, ignore_first_frame=True, save_frames=True)
-
+        slam.eval_semantic_result(
+            eval_dir_suffix=args.stage, ignore_first_frame=True, save_frames=True
+        )
 
     ##################################################
     ### Runtime Analysis

@@ -22,7 +22,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 
-
 import cv2
 from glob import glob
 import json
@@ -33,11 +32,8 @@ from typing import List, Tuple
 
 
 def create_camera_frustum(
-        color    : List,
-        extrinsic: np.ndarray,
-        intrinsic: np.ndarray,
-        scale    : float=1.0
-        ) -> o3d.geometry.LineSet:
+    color: List, extrinsic: np.ndarray, intrinsic: np.ndarray, scale: float = 1.0
+) -> o3d.geometry.LineSet:
     """Create a frustum for visualization.
 
     Args:
@@ -46,11 +42,11 @@ def create_camera_frustum(
         intrinsic (np.ndarray, [3,3]): Intrinsic matrix of the camera (3x3).
         scale (float)                : Scale of the frustum.
 
-    Returns: 
+    Returns:
         line_set (open3d.geometry.LineSet) representing the frustum.
     """
     # Create frustum points (in camera coordinates)
-    fovy = 2 * np.arctan( intrinsic[1, 2] / intrinsic[1, 1]) # Assuming square pixels
+    fovy = 2 * np.arctan(intrinsic[1, 2] / intrinsic[1, 1])  # Assuming square pixels
     aspect_ratio = intrinsic[0, 0] / intrinsic[1, 1]
     near_plane = 0.00
     far_plane = 0.1 * scale
@@ -62,15 +58,25 @@ def create_camera_frustum(
         frustum_points.extend([[-x, -y, -z], [x, -y, -z], [x, y, -z], [-x, y, -z]])
 
     # Transform frustum points to world coordinates
-    frustum_points = np.dot(extrinsic, np.hstack((frustum_points, np.ones((8, 1)))).T).T[:, :3]
+    frustum_points = np.dot(
+        extrinsic, np.hstack((frustum_points, np.ones((8, 1)))).T
+    ).T[:, :3]
     frustum_points = frustum_points[:, :3]
 
     # Scale down the frustum size
     # frustum_points *= scale
 
     # Create lines
-    lines = [[0, 4], [1, 5], [2, 6], [3, 7], # lines from origin to far plane
-             [4, 5], [5, 6], [6, 7], [7, 4]] # lines in the far plane
+    lines = [
+        [0, 4],
+        [1, 5],
+        [2, 6],
+        [3, 7],  # lines from origin to far plane
+        [4, 5],
+        [5, 6],
+        [6, 7],
+        [7, 4],
+    ]  # lines in the far plane
 
     # Create line set
     line_set = o3d.geometry.LineSet()
@@ -82,11 +88,11 @@ def create_camera_frustum(
 
 
 def create_dashed_line(
-        points     : np.ndarray,
-        dash_length: float = 0.05,
-        gap_length : float = 0.05,
-        color      : List = [1, 0, 0]
-        ) -> o3d.geometry.LineSet: 
+    points: np.ndarray,
+    dash_length: float = 0.05,
+    gap_length: float = 0.05,
+    color: List = [1, 0, 0],
+) -> o3d.geometry.LineSet:
     """
     Create a dashed line from a list of points.
 
@@ -111,7 +117,7 @@ def create_dashed_line(
         segment_vector = end_point - start_point
         segment_length = np.linalg.norm(segment_vector)
         if segment_length != 0:
-            segment_vector /= segment_length # normalize
+            segment_vector /= segment_length  # normalize
 
         current_pos = 0
         while current_pos + dash_length < segment_length:
@@ -133,11 +139,12 @@ def create_dashed_line(
 
 
 def save_camera_parameters(vis: o3d.visualization.VisualizerWithKeyCallback) -> None:
-    """ Callback function to save camera parameters when the 'S' key is pressed.
-    
+    """Callback function to save camera parameters when the 'S' key is pressed.
+
     Args:
         vis: The Open3D visualizer instance.
     """
+
     # Define the key callback function
     def key_callback(vis, action, mods):
         # Get current camera parameters
@@ -152,16 +159,18 @@ def save_camera_parameters(vis: o3d.visualization.VisualizerWithKeyCallback) -> 
     vis.register_key_action_callback(ord("S"), key_callback)
 
 
-def load_camera_parameters_from_json(json_file: str) -> o3d.camera.PinholeCameraParameters:
-    """ load camera parameters from json
+def load_camera_parameters_from_json(
+    json_file: str,
+) -> o3d.camera.PinholeCameraParameters:
+    """load camera parameters from json
 
     Args:
         json_file (str): camera parameter json file
-    
+
     Returns:
         cam_param (o3d.camera.PinholeCameraParameters): camera parameters
     """
-    with open(json_file, 'r') as file:
+    with open(json_file, "r") as file:
         data = json.load(file)
 
     # Load intrinsic parameters
@@ -169,10 +178,10 @@ def load_camera_parameters_from_json(json_file: str) -> o3d.camera.PinholeCamera
     intrinsic = o3d.camera.PinholeCameraIntrinsic(
         intrinsic_params["width"],
         intrinsic_params["height"],
-        intrinsic_params["intrinsic_matrix"][0], # fx
-        intrinsic_params["intrinsic_matrix"][4], # fy
-        intrinsic_params["intrinsic_matrix"][2], # cx
-        intrinsic_params["intrinsic_matrix"][5] # cy
+        intrinsic_params["intrinsic_matrix"][0],  # fx
+        intrinsic_params["intrinsic_matrix"][4],  # fy
+        intrinsic_params["intrinsic_matrix"][2],  # cx
+        intrinsic_params["intrinsic_matrix"][5],  # cy
     )
 
     # Load extrinsic parameters
@@ -188,7 +197,7 @@ def load_camera_parameters_from_json(json_file: str) -> o3d.camera.PinholeCamera
     return cam_param
 
 
-def load_rgbd_images(img_dir: str, scale: float = 1.) -> Tuple[List, List]:
+def load_rgbd_images(img_dir: str, scale: float = 1.0) -> Tuple[List, List]:
     """load rgbd images from img_direcotry
 
     Args:
@@ -201,7 +210,7 @@ def load_rgbd_images(img_dir: str, scale: float = 1.) -> Tuple[List, List]:
             - depth_images: List of (o3d.geometry.Image)
 
     Attributes:
-        
+
     """
     rgbd_paths = sorted(glob(os.path.join(img_dir, "*.png")))
     rgb_images = []
@@ -211,15 +220,14 @@ def load_rgbd_images(img_dir: str, scale: float = 1.) -> Tuple[List, List]:
         rgbd_img = o3d.io.read_image(img_path)
         rgbd_img = np.asarray(rgbd_img)
 
-
         ### resize image ###
         h, w, _ = rgbd_img.shape
-        h, w = int(h * scale), int(w * scale) 
+        h, w = int(h * scale), int(w * scale)
         rgbd_img = cv2.resize(rgbd_img, (w, h))
-        
+
         ### split RGB-D ###
-        rgb_img = np.ascontiguousarray(rgbd_img[:, :w//2])
-        depth_img = np.ascontiguousarray(rgbd_img[:, w//2:])
+        rgb_img = np.ascontiguousarray(rgbd_img[:, : w // 2])
+        depth_img = np.ascontiguousarray(rgbd_img[:, w // 2 :])
 
         ### convert to o3d format ###
         rgb_img = o3d.geometry.Image(rgb_img)
@@ -264,8 +272,11 @@ class LineMesh(object):
             radius {float} -- radius of cylinder (default: {0.15})
         """
         self.points = np.array(points)
-        self.lines = np.array(
-            lines) if lines is not None else self.lines_from_ordered_points(self.points)
+        self.lines = (
+            np.array(lines)
+            if lines is not None
+            else self.lines_from_ordered_points(self.points)
+        )
         self.colors = np.array(colors)
         self.radius = radius
         self.cylinder_segments = []
@@ -282,7 +293,7 @@ class LineMesh(object):
         second_points = self.points[self.lines[:, 1], :]
         line_segments = second_points - first_points
         ### filter invalid segments ###
-        valid_mask = [np.all(line_seg!=0) for line_seg in line_segments]
+        valid_mask = [np.all(line_seg != 0) for line_seg in line_segments]
         line_segments = line_segments[valid_mask]
 
         line_segments_unit, line_lengths = normalized(line_segments)
@@ -298,13 +309,15 @@ class LineMesh(object):
             translation = first_points[i, :] + line_segment * line_length * 0.5
             # create cylinder and apply transformations
             cylinder_segment = o3d.geometry.TriangleMesh.create_cylinder(
-                self.radius, line_length)
-            cylinder_segment = cylinder_segment.translate(
-                translation, relative=False)
+                self.radius, line_length
+            )
+            cylinder_segment = cylinder_segment.translate(translation, relative=False)
             if axis is not None:
                 axis_a = axis * angle
                 cylinder_segment = cylinder_segment.rotate(
-                    R=o3d.geometry.get_rotation_matrix_from_axis_angle(axis_a), center=cylinder_segment.get_center())
+                    R=o3d.geometry.get_rotation_matrix_from_axis_angle(axis_a),
+                    center=cylinder_segment.get_center(),
+                )
                 # cylinder_segment = cylinder_segment.rotate(
                 #   axis_a, center=True, type=o3d.geometry.RotationType.AxisAngle)
             # color cylinder

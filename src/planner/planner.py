@@ -22,7 +22,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 
-
 import mmengine
 import numpy as np
 
@@ -30,21 +29,18 @@ from src.utils.general_utils import InfoPrinter
 from src.utils.timer import Timer
 
 
-class Planner():
-    def __init__(self, 
-                 main_cfg: mmengine.Config,
-                 info_printer: InfoPrinter
-                 ) -> None:
+class Planner:
+    def __init__(self, main_cfg: mmengine.Config, info_printer: InfoPrinter) -> None:
         """
         Args:
             main_cfg (mmengine.Config): Configuration
             info_printer (InfoPrinter): information printer
-    
+
         Attributes:
             main_cfg (mmengine.Config)   : configurations
             planner_cfg (mmengine.Config): planner configurations
             info_printer (InfoPrinter)   : information printer
-            
+
         """
         self.main_cfg = main_cfg
         self.planner_cfg = main_cfg.planner
@@ -54,42 +50,42 @@ class Planner():
         self.init_timer()
 
     def update_step(self, step):
-        """ update step information
-    
+        """update step information
+
         Args:
             step (int): step size
-    
+
         """
         self.step = step
 
     def init_timer(self):
-        """ initialize timer if requested
+        """initialize timer if requested
         Attributes:
             timer (Timer): timer object
-            
+
         """
         self.timer = Timer()
         if self.planner_cfg.get("enable_timing", False):
             self.enable_timing = True
         else:
             self.enable_timing = False
-    
+
     def update_sim(self, sim):
-        """ initialize/update a Simulator if requested
+        """initialize/update a Simulator if requested
         Attributes:
             sim (Simulator): Simulator object
-            
+
         """
         self.sim = sim
 
     def vox2loc(self, vox, bbox=None, voxel_size=None):
-        """ convert voxel coordinates to metric coordinates
-    
+        """convert voxel coordinates to metric coordinates
+
         Args:
             vox (np.ndarray, [3])   : voxel coordinates
             bbox (np.ndarray, [3,2]): bounding box corner coordinates. Use self.bbox if not provided
             voxel_size (float)      : voxel size. Unit: meter. Use self.bbox if not provided
-    
+
         Returns:
             loc (np.ndarray, [3]): metric coordinates
         """
@@ -98,15 +94,15 @@ class Planner():
 
         loc = vox * voxel_size + bbox[:, 0]
         return loc
-    
+
     def loc2vox(self, loc, bbox=None, voxel_size=None):
-        """ convert metric coordinates to voxel coordinates.
-    
+        """convert metric coordinates to voxel coordinates.
+
         Args:
             loc (np.ndarray, [3])   : metric coordinates
             bbox (np.ndarray, [3,2]): bounding box corner coordinates. Use self.bbox if not provided
             voxel_size (float)      : voxel size. Unit: meter. Use self.bbox if not provided
-    
+
         Returns:
             vox (np.ndarray, [3]): voxel coordinates
         """
@@ -118,19 +114,17 @@ class Planner():
 
 
 def compute_camera_pose_RUB(
-        A     : np.ndarray,
-        B     : np.ndarray,
-        up_dir: np.ndarray = np.array([0, 0, 1])
-        ) -> np.ndarray:
-    """ compute camera pose given current location A and look-at location B.
-    Using OpenGL (RUB) coordinate system. 
+    A: np.ndarray, B: np.ndarray, up_dir: np.ndarray = np.array([0, 0, 1])
+) -> np.ndarray:
+    """compute camera pose given current location A and look-at location B.
+    Using OpenGL (RUB) coordinate system.
     up_dir is the up direction w.r.t world coorindate origin pose.
 
     Args:
         A (np.ndarray, [3])     : current location
         B (np.ndarray, [3])     : look-at location
         up_dir (np.ndarray, [3]): up direction in world coordinate
-    
+
     Returns:
         M (np.ndarray, [3, 3]): rotation matrix
     """
@@ -139,7 +133,7 @@ def compute_camera_pose_RUB(
 
     ### FIXME: for edge case that target points in the same x,y position ###
     # if V[0] == 0 and V[1] == 0:
-    if (np.cross(V, up_dir)==0).all():
+    if (np.cross(V, up_dir) == 0).all():
         V[0] = 1e-6
 
     # right viewing direction
@@ -154,25 +148,23 @@ def compute_camera_pose_RUB(
     U = U / np.linalg.norm(U)
 
     # construct pose matrix
-    M = np.column_stack((R, U, V))  
+    M = np.column_stack((R, U, V))
 
     return M
 
 
 def compute_camera_pose_RDF(
-        A     : np.ndarray,
-        B     : np.ndarray,
-        up_dir: np.ndarray = np.array([0, -1, 0])
-        ) -> np.ndarray:
-    """ compute camera pose given current location A and look-at location B.
-    Using OpenCV (RDF) coordinate system. 
+    A: np.ndarray, B: np.ndarray, up_dir: np.ndarray = np.array([0, -1, 0])
+) -> np.ndarray:
+    """compute camera pose given current location A and look-at location B.
+    Using OpenCV (RDF) coordinate system.
     up_dir is the up direction w.r.t world coorindate origin pose.
 
     Args:
         A (np.ndarray, [3])     : current location
         B (np.ndarray, [3])     : look-at location
         up_dir (np.ndarray, [3]): up direction in world coordinate
-    
+
     Returns:
         M (np.ndarray, [3, 3]): rotation matrix
     """
@@ -181,7 +173,7 @@ def compute_camera_pose_RDF(
 
     ### FIXME: for edge case that target points in the same x,y position ###
     # if V[0] == 0 and V[1] == 0:
-    if (np.cross(V, up_dir)==0).all():
+    if (np.cross(V, up_dir) == 0).all():
         V[0] = 1e-6
 
     # +X viewing direction
@@ -196,19 +188,19 @@ def compute_camera_pose_RDF(
     U = U / np.linalg.norm(U)
 
     # construct pose matrix
-    M = np.column_stack((R, U, V))  
+    M = np.column_stack((R, U, V))
 
     return M
 
 
 def compute_camera_pose(
-        A     : np.ndarray,
-        B     : np.ndarray,
-        up_dir: np.ndarray = np.array([0, 0, 1]),
-        system: str = 'RUB'
-        ) -> np.ndarray:
-    """ compute camera pose given current location A and look-at location B.
-    Using OpenGL (RUB) coordinate system. 
+    A: np.ndarray,
+    B: np.ndarray,
+    up_dir: np.ndarray = np.array([0, 0, 1]),
+    system: str = "RUB",
+) -> np.ndarray:
+    """compute camera pose given current location A and look-at location B.
+    Using OpenGL (RUB) coordinate system.
     up_dir is the up direction w.r.t world coorindate origin pose.
 
     Args:
@@ -216,7 +208,7 @@ def compute_camera_pose(
         B (np.ndarray, [3])     : look-at location
         up_dir (np.ndarray, [3]): up direction in world coordinate
         system                  : coordinate system
-    
+
     Returns:
         M (np.ndarray, [3, 3]): rotation matrix
     """
@@ -226,4 +218,3 @@ def compute_camera_pose(
         return compute_camera_pose_RDF(A, B, up_dir)
     else:
         raise NotImplementedError
-

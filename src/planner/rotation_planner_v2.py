@@ -4,15 +4,23 @@ import matplotlib.pyplot as plt
 
 ## From path_plan_4.py ##
 
+
 # Helper function for cubic Bezier curve interpolation
 def bezier_curve(t, p0, p1, p2, p3):
-    return (1 - t) ** 3 * p0 + 3 * (1 - t) ** 2 * t * p1 + 3 * (1 - t) * t ** 2 * p2 + t ** 3 * p3
+    return (
+        (1 - t) ** 3 * p0
+        + 3 * (1 - t) ** 2 * t * p1
+        + 3 * (1 - t) * t**2 * p2
+        + t**3 * p3
+    )
 
 
 # Generate curved path points
 def generate_bezier_path(start_pos, end_pos, control1, control2, n_points):
     t_values = np.linspace(0, 1, n_points)
-    curve_points = [bezier_curve(t, start_pos, control1, control2, end_pos) for t in t_values]
+    curve_points = [
+        bezier_curve(t, start_pos, control1, control2, end_pos) for t in t_values
+    ]
     return np.array(curve_points)
 
 
@@ -43,7 +51,9 @@ def calculate_initial_orientation(first_pos, second_pos):
 
     # Define the desired orientation: align z-axis (forward) with the direction vector
     z_axis = direction  # New forward direction
-    x_axis = np.cross([0, -1, 0], z_axis)  # Cross with y-down to get the right direction
+    x_axis = np.cross(
+        [0, -1, 0], z_axis
+    )  # Cross with y-down to get the right direction
     x_axis /= np.linalg.norm(x_axis)  # Normalize the x-axis
     y_axis = np.cross(z_axis, x_axis)  # y-axis is orthogonal to both
 
@@ -51,12 +61,14 @@ def calculate_initial_orientation(first_pos, second_pos):
     rotation_matrix = np.column_stack((x_axis, y_axis, z_axis))
 
     # Convert rotation matrix to Euler angles
-    initial_rotation = R.from_matrix(rotation_matrix).as_euler('xyz', degrees=True)
+    initial_rotation = R.from_matrix(rotation_matrix).as_euler("xyz", degrees=True)
     return initial_rotation
 
 
 # Function to generate a smooth trajectory of poses
-def smoothen_trajectory(start_pose, end_pose, positions, max_angle_deg=10, gravity_vector=[0, 0, -1]):
+def smoothen_trajectory(
+    start_pose, end_pose, positions, max_angle_deg=10, gravity_vector=[0, 0, -1]
+):
     """
     Generates a smooth trajectory with position and orientation transitions between start and end poses.
 
@@ -111,16 +123,18 @@ def smoothen_trajectory(start_pose, end_pose, positions, max_angle_deg=10, gravi
     steps_for_180_deg = int(180 / max_angle_deg)  # Half-circle interpolation
 
     # Convert start and end rotations to quaternions
-    start_quat = R.from_euler('xyz', start_rot, degrees=True).as_quat()
-    end_quat = R.from_euler('xyz', end_rot, degrees=True).as_quat()
+    start_quat = R.from_euler("xyz", start_rot, degrees=True).as_quat()
+    end_quat = R.from_euler("xyz", end_rot, degrees=True).as_quat()
 
     # Interpolate quaternions with max angle constraint
-    interp_quats, min_rotation_steps = lerp_quaternions(start_quat, end_quat, max_angle_deg)
+    interp_quats, min_rotation_steps = lerp_quaternions(
+        start_quat, end_quat, max_angle_deg
+    )
     num_of_points = len(positions)
     num_of_rotations = min_rotation_steps + 1
 
     if num_of_points > steps_for_180_deg * 2:
-        assert (num_of_points > num_of_rotations)
+        assert num_of_points > num_of_rotations
 
     print("Number of positions:", num_of_points)
     print("Number of rotations (min steps):", num_of_rotations)
@@ -131,15 +145,20 @@ def smoothen_trajectory(start_pose, end_pose, positions, max_angle_deg=10, gravi
     # Case 1: More rotations than positions
     if num_of_rotations > num_of_points:
         # interp_quats, _ = lerp_quaternions(start_quat, end_quat, max_angle_deg)
-        rotations = R.from_quat(interp_quats).as_euler('xyz', degrees=True)
+        rotations = R.from_quat(interp_quats).as_euler("xyz", degrees=True)
 
         extra_points = num_of_rotations - num_of_points
-        print("More rotations than positions; extending positions with end point by", extra_points)
+        print(
+            "More rotations than positions; extending positions with end point by",
+            extra_points,
+        )
         positions = np.vstack([positions, np.tile(positions[-1], (extra_points, 1))])
 
     # Case 2: Positions > steps_for_180_deg * 2 (Positions should exceed rotations)
     elif num_of_points > steps_for_180_deg * 2:
-        print("Positions exceed 36; setting trajectory-following rotations in the middle.")
+        print(
+            "Positions exceed 36; setting trajectory-following rotations in the middle."
+        )
 
         # Calculate split counts based on max_angle_deg to ensure smooth interpolation
         start_count = steps_for_180_deg
@@ -165,7 +184,9 @@ def smoothen_trajectory(start_pose, end_pose, positions, max_angle_deg=10, gravi
         # Interpolate from start_quat to target_quat to smoothly transition into trajectory-following rotation
         start_interp_quats, _ = lerp_quaternions(start_quat, target_quat, max_angle_deg)
         # print("Start interp quats shape:", start_interp_quats.shape)
-        rotations[:len(start_interp_quats)] = R.from_quat(start_interp_quats).as_euler('xyz', degrees=True)
+        rotations[: len(start_interp_quats)] = R.from_quat(start_interp_quats).as_euler(
+            "xyz", degrees=True
+        )
 
         # Stage 2: Interpolate from the last trajectory-following rotation to end_rot
         # Calculate the direction vector using positions[-end_count - 1] and positions[-end_count]
@@ -185,7 +206,9 @@ def smoothen_trajectory(start_pose, end_pose, positions, max_angle_deg=10, gravi
         # Interpolate from the last trajectory-following rotation to the end_rot smoothly
         end_interp_quats, _ = lerp_quaternions(end_target_quat, end_quat, max_angle_deg)
         # print("End interp quats shape:", end_interp_quats.shape)
-        rotations[-len(end_interp_quats):] = R.from_quat(end_interp_quats).as_euler('xyz', degrees=True)
+        rotations[-len(end_interp_quats) :] = R.from_quat(end_interp_quats).as_euler(
+            "xyz", degrees=True
+        )
 
         # Calculate the middle section range
         middle_start = len(start_interp_quats)
@@ -206,28 +229,38 @@ def smoothen_trajectory(start_pose, end_pose, positions, max_angle_deg=10, gravi
             y_axis = np.cross(z_axis, x_axis)  # Recompute y to ensure orthogonality
 
             rotation_matrix = np.column_stack((x_axis, y_axis, z_axis))
-            rotations[i] = R.from_matrix(rotation_matrix).as_euler('xyz', degrees=True)
+            rotations[i] = R.from_matrix(rotation_matrix).as_euler("xyz", degrees=True)
 
     # Case 3: Positions exceed rotations
     elif num_of_rotations <= num_of_points:
-        print("Positions exceed rotations; splitting rotations at start and end with identity in center.")
+        print(
+            "Positions exceed rotations; splitting rotations at start and end with identity in center."
+        )
 
         # Calculate split point, adjusting for odd num_of_rotations
         start_count = num_of_rotations // 2
         end_count = num_of_rotations - start_count
 
         # Apply rotations at the start
-        rotations[:start_count] = R.from_quat(interp_quats[:start_count]).as_euler('xyz', degrees=True)
+        rotations[:start_count] = R.from_quat(interp_quats[:start_count]).as_euler(
+            "xyz", degrees=True
+        )
 
         # Set center rotations to match the last rotation at start boundary
-        center_rotation = R.from_quat(interp_quats[start_count]).as_euler('xyz', degrees=True)
-        rotations[start_count: num_of_points - end_count] = center_rotation
+        center_rotation = R.from_quat(interp_quats[start_count]).as_euler(
+            "xyz", degrees=True
+        )
+        rotations[start_count : num_of_points - end_count] = center_rotation
 
         # Apply rotations at the end
-        rotations[-end_count:] = R.from_quat(interp_quats[-end_count:]).as_euler('xyz', degrees=True)
+        rotations[-end_count:] = R.from_quat(interp_quats[-end_count:]).as_euler(
+            "xyz", degrees=True
+        )
 
     else:
-        raise NotImplementedError("This case logic has not been implemented yet. Please review inputs or logic.")
+        raise NotImplementedError(
+            "This case logic has not been implemented yet. Please review inputs or logic."
+        )
 
     # Combine positions and rotations into poses
     poses = np.hstack((positions, rotations))
@@ -236,7 +269,9 @@ def smoothen_trajectory(start_pose, end_pose, positions, max_angle_deg=10, gravi
     return poses
 
 
-def poses_to_transformation_matrices(poses: np.ndarray, degrees: bool = True) -> np.ndarray:
+def poses_to_transformation_matrices(
+    poses: np.ndarray, degrees: bool = True
+) -> np.ndarray:
     """
     Converts an Nx6 array of positions and Euler angles into an Nx4x4 array of transformation matrices.
 
@@ -249,29 +284,32 @@ def poses_to_transformation_matrices(poses: np.ndarray, degrees: bool = True) ->
         np.ndarray: An (N, 4, 4) array of 4x4 transformation matrices.
     """
     n_poses = poses.shape[0]
-    
+
     # Initialize the Nx4x4 transformation matrix array
     transformation_matrices = np.zeros((n_poses, 4, 4))
-    
+
     for i in range(n_poses):
         # Extract position and rotation (Euler angles)
         position = poses[i, :3]  # [x, y, z]
         euler_angles = poses[i, 3:]  # [roll, pitch, yaw]
-        
+
         # Create rotation matrix from Euler angles
-        rotation_matrix = R.from_euler('xyz', euler_angles, degrees=degrees).as_matrix()
-        
+        rotation_matrix = R.from_euler("xyz", euler_angles, degrees=degrees).as_matrix()
+
         # Construct the 4x4 transformation matrix
         transformation_matrix = np.eye(4)
         transformation_matrix[:3, :3] = rotation_matrix
         transformation_matrix[:3, 3] = position
-        
+
         # Assign to the output array
         transformation_matrices[i] = transformation_matrix
-    
+
     return transformation_matrices
 
-def smoothen_trajectory_v2(start_pose, end_pose, positions, max_angle_deg=10, gravity_vector=[0, 0, -1]):
+
+def smoothen_trajectory_v2(
+    start_pose, end_pose, positions, max_angle_deg=10, gravity_vector=[0, 0, -1]
+):
     """
     Generates a smooth trajectory with position and orientation transitions between start and end poses.
 
@@ -341,12 +379,14 @@ def smoothen_trajectory_v2(start_pose, end_pose, positions, max_angle_deg=10, gr
     # end_quat = R.from_euler('xyz', end_rot, degrees=True).as_quat()
 
     # Interpolate quaternions with max angle constraint
-    interp_quats, min_rotation_steps = lerp_quaternions(start_quat, end_quat, max_angle_deg)
+    interp_quats, min_rotation_steps = lerp_quaternions(
+        start_quat, end_quat, max_angle_deg
+    )
     num_of_points = len(positions)
     num_of_rotations = min_rotation_steps + 1
 
     if num_of_points > steps_for_180_deg * 2:
-        assert (num_of_points > num_of_rotations)
+        assert num_of_points > num_of_rotations
 
     print("Number of positions:", num_of_points)
     print("Number of rotations (min steps):", num_of_rotations)
@@ -357,15 +397,20 @@ def smoothen_trajectory_v2(start_pose, end_pose, positions, max_angle_deg=10, gr
     # Case 1: More rotations than positions
     if num_of_rotations > num_of_points:
         # interp_quats, _ = lerp_quaternions(start_quat, end_quat, max_angle_deg)
-        rotations = R.from_quat(interp_quats).as_euler('xyz', degrees=True)
+        rotations = R.from_quat(interp_quats).as_euler("xyz", degrees=True)
 
         extra_points = num_of_rotations - num_of_points
-        print("More rotations than positions; extending positions with end point by", extra_points)
+        print(
+            "More rotations than positions; extending positions with end point by",
+            extra_points,
+        )
         positions = np.vstack([positions, np.tile(positions[-1], (extra_points, 1))])
 
     # Case 2: Positions > steps_for_180_deg * 2 (Positions should exceed rotations)
     elif num_of_points > steps_for_180_deg * 2:
-        print("Positions exceed 36; setting trajectory-following rotations in the middle.")
+        print(
+            "Positions exceed 36; setting trajectory-following rotations in the middle."
+        )
 
         # Calculate split counts based on max_angle_deg to ensure smooth interpolation
         start_count = steps_for_180_deg
@@ -391,7 +436,9 @@ def smoothen_trajectory_v2(start_pose, end_pose, positions, max_angle_deg=10, gr
         # Interpolate from start_quat to target_quat to smoothly transition into trajectory-following rotation
         start_interp_quats, _ = lerp_quaternions(start_quat, target_quat, max_angle_deg)
         # print("Start interp quats shape:", start_interp_quats.shape)
-        rotations[:len(start_interp_quats)] = R.from_quat(start_interp_quats).as_euler('xyz', degrees=True)
+        rotations[: len(start_interp_quats)] = R.from_quat(start_interp_quats).as_euler(
+            "xyz", degrees=True
+        )
 
         # Stage 2: Interpolate from the last trajectory-following rotation to end_rot
         # Calculate the direction vector using positions[-end_count - 1] and positions[-end_count]
@@ -411,7 +458,9 @@ def smoothen_trajectory_v2(start_pose, end_pose, positions, max_angle_deg=10, gr
         # Interpolate from the last trajectory-following rotation to the end_rot smoothly
         end_interp_quats, _ = lerp_quaternions(end_target_quat, end_quat, max_angle_deg)
         # print("End interp quats shape:", end_interp_quats.shape)
-        rotations[-len(end_interp_quats):] = R.from_quat(end_interp_quats).as_euler('xyz', degrees=True)
+        rotations[-len(end_interp_quats) :] = R.from_quat(end_interp_quats).as_euler(
+            "xyz", degrees=True
+        )
 
         # Calculate the middle section range
         middle_start = len(start_interp_quats)
@@ -432,28 +481,38 @@ def smoothen_trajectory_v2(start_pose, end_pose, positions, max_angle_deg=10, gr
             y_axis = np.cross(z_axis, x_axis)  # Recompute y to ensure orthogonality
 
             rotation_matrix = np.column_stack((x_axis, y_axis, z_axis))
-            rotations[i] = R.from_matrix(rotation_matrix).as_euler('xyz', degrees=True)
+            rotations[i] = R.from_matrix(rotation_matrix).as_euler("xyz", degrees=True)
 
     # Case 3: Positions exceed rotations
     elif num_of_rotations <= num_of_points:
-        print("Positions exceed rotations; splitting rotations at start and end with identity in center.")
+        print(
+            "Positions exceed rotations; splitting rotations at start and end with identity in center."
+        )
 
         # Calculate split point, adjusting for odd num_of_rotations
         start_count = num_of_rotations // 2
         end_count = num_of_rotations - start_count
 
         # Apply rotations at the start
-        rotations[:start_count] = R.from_quat(interp_quats[:start_count]).as_euler('xyz', degrees=True)
+        rotations[:start_count] = R.from_quat(interp_quats[:start_count]).as_euler(
+            "xyz", degrees=True
+        )
 
         # Set center rotations to match the last rotation at start boundary
-        center_rotation = R.from_quat(interp_quats[start_count]).as_euler('xyz', degrees=True)
-        rotations[start_count: num_of_points - end_count] = center_rotation
+        center_rotation = R.from_quat(interp_quats[start_count]).as_euler(
+            "xyz", degrees=True
+        )
+        rotations[start_count : num_of_points - end_count] = center_rotation
 
         # Apply rotations at the end
-        rotations[-end_count:] = R.from_quat(interp_quats[-end_count:]).as_euler('xyz', degrees=True)
+        rotations[-end_count:] = R.from_quat(interp_quats[-end_count:]).as_euler(
+            "xyz", degrees=True
+        )
 
     else:
-        raise NotImplementedError("This case logic has not been implemented yet. Please review inputs or logic.")
+        raise NotImplementedError(
+            "This case logic has not been implemented yet. Please review inputs or logic."
+        )
 
     # Combine positions and rotations into poses
     poses = np.hstack((positions, rotations))
@@ -469,15 +528,15 @@ def smoothen_trajectory_v2(start_pose, end_pose, positions, max_angle_deg=10, gr
 # Visualization function with orientation
 def visualize_trajectory_with_orientation(poses):
     fig = plt.figure()
-    ax = fig.add_subplot(111, projection='3d')
+    ax = fig.add_subplot(111, projection="3d")
 
     # Plot start and end poses
-    ax.scatter(*poses[0][:3], color='green', label='Start Pose')
-    ax.scatter(*poses[-1][:3], color='red', label='End Pose')
+    ax.scatter(*poses[0][:3], color="green", label="Start Pose")
+    ax.scatter(*poses[-1][:3], color="red", label="End Pose")
 
     # Plot the interpolated trajectory
     x, y, z = poses[:, 0], poses[:, 1], poses[:, 2]
-    ax.plot(x, y, z, color='blue', label='Interpolated Path')
+    ax.plot(x, y, z, color="blue", label="Interpolated Path")
 
     # Add orientation quivers to represent rotation
     # for i in range(0, len(poses), max(1, len(poses) // 10)):  # Adjust to show fewer quivers
@@ -485,13 +544,21 @@ def visualize_trajectory_with_orientation(poses):
         pos = poses[i][:3]
         rot = poses[i][3:]
         # Compute direction vectors based on rotation
-        rot_matrix = R.from_euler('xyz', rot, degrees=True).as_matrix()
+        rot_matrix = R.from_euler("xyz", rot, degrees=True).as_matrix()
 
         # Define quiver arrows for each axis
-        for j, color in zip(range(3), ['r', 'g', 'b']):  # RGB for XYZ axis directions
-            ax.quiver(pos[0], pos[1], pos[2],
-                      rot_matrix[0, j], rot_matrix[1, j], rot_matrix[2, j],
-                      length=0.5, color=color, normalize=True)
+        for j, color in zip(range(3), ["r", "g", "b"]):  # RGB for XYZ axis directions
+            ax.quiver(
+                pos[0],
+                pos[1],
+                pos[2],
+                rot_matrix[0, j],
+                rot_matrix[1, j],
+                rot_matrix[2, j],
+                length=0.5,
+                color=color,
+                normalize=True,
+            )
 
     ax.set_xlabel("X")
     ax.set_ylabel("Y")
@@ -499,9 +566,12 @@ def visualize_trajectory_with_orientation(poses):
     ax.legend()
     plt.show()
 
+
 if __name__ == "__main__":
     # Test parameters
-    start_pose = np.array([0, 0, 0, -90, 0, 0])  # Start position and rotation (x, y, z, roll, pitch, yaw)
+    start_pose = np.array(
+        [0, 0, 0, -90, 0, 0]
+    )  # Start position and rotation (x, y, z, roll, pitch, yaw)
     end_pose = np.array([1, 1, 1, -90, 0, -45])  # End position and rotation
 
     # Generate positions along a Bezier curve
@@ -510,8 +580,12 @@ if __name__ == "__main__":
     control2 = np.array([8, 5, 10])  # Second control point for Bezier curve
     start_pos, start_rot = start_pose[:3], start_pose[3:]
     end_pos, end_roend_rott = end_pose[:3], end_pose[3:]
-    positions = generate_bezier_path(start_pose[:3], end_pose[:3], control1, control2, n_points + 1)
+    positions = generate_bezier_path(
+        start_pose[:3], end_pose[:3], control1, control2, n_points + 1
+    )
 
     # Generate and visualize poses
-    poses = smoothen_trajectory(start_pose, end_pose, positions, max_angle_deg=10, gravity_vector=[0, 0, -1])
+    poses = smoothen_trajectory(
+        start_pose, end_pose, positions, max_angle_deg=10, gravity_vector=[0, 0, -1]
+    )
     visualize_trajectory_with_orientation(poses)

@@ -1,9 +1,22 @@
-from src.slam.semsplatam.modified_ver.datasets.gradslam_datasets.replica import ReplicaDataset
+from src.slam.semsplatam.modified_ver.datasets.gradslam_datasets.replica import (
+    ReplicaDataset,
+)
 from src.slam.semsplatam.modified_ver.datasets.gradslam_datasets.mp3d import MP3DDataset
-from src.slam.splatam.modified_ver.datasets.gradslam_datasets.replica import ReplicaV2Dataset
-from third_parties.splatam.datasets.gradslam_datasets import (ICLDataset, AzureKinectDataset,
-                                        ScannetDataset, Ai2thorDataset, Record3DDataset, RealsenseDataset, TUMDataset,
-                                        ScannetPPDataset, NeRFCaptureDataset)
+from src.slam.splatam.modified_ver.datasets.gradslam_datasets.replica import (
+    ReplicaV2Dataset,
+)
+from third_parties.splatam.datasets.gradslam_datasets import (
+    ICLDataset,
+    AzureKinectDataset,
+    ScannetDataset,
+    Ai2thorDataset,
+    Record3DDataset,
+    RealsenseDataset,
+    TUMDataset,
+    ScannetPPDataset,
+    NeRFCaptureDataset,
+)
+
 
 def get_dataset(config_dict, basedir, sequence, **kwargs):
     if config_dict["dataset_name"].lower() in ["icl"]:

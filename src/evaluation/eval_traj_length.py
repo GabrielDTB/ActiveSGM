@@ -22,12 +22,12 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 
-
 import argparse
 import os
 import sys
 import torch
 from tqdm import tqdm
+
 sys.path.append(os.getcwd())
 
 from src.utils.general_utils import update_results_file
@@ -38,15 +38,16 @@ def argument_parsing() -> argparse.Namespace:
 
     Returns:
         args: arguments
-        
+
     """
     parser = argparse.ArgumentParser(
-            description="Arguments to calculate trajectory from the poses stored in checkpoint."
-        )
+        description="Arguments to calculate trajectory from the poses stored in checkpoint."
+    )
     parser.add_argument("--ckpt", type=str, help="Checkpoint path")
     parser.add_argument("--result_txt", type=str, help="result txt")
     args = parser.parse_args()
     return args
+
 
 if __name__ == "__main__":
     args = argument_parsing()
@@ -61,9 +62,9 @@ if __name__ == "__main__":
     ##################################################
     ### read pose and calculate trajectory and save in result
     ##################################################
-    poses_tensor = ckpt['pose']
+    poses_tensor = ckpt["pose"]
     traj_len = 0
-    
+
     for i in tqdm(range(len(poses_tensor)), desc="==> Calculating traj. length: "):
         if i == 0:
             cur_pose = poses_tensor[i]
@@ -71,12 +72,11 @@ if __name__ == "__main__":
         rel_pose = torch.inverse(poses_tensor[i]) @ cur_pose
         traj_len += torch.norm(rel_pose[:3, 3]).item()
         cur_pose = poses_tensor[i]
-    
+
     print(f"==> Total trajectory length: {traj_len:.2f}")
-    
+
     ##################################################
     ### write/update result to the result txt
     ##################################################
     result = {"traj_len(m)": traj_len}
     update_results_file(result, args.result_txt)
-    

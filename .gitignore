@@ -4,3 +4,4 @@
 /third_parties/
 *.bin
 *.pth
+.ruff_cache

@@ -40,17 +40,15 @@ def init_visualizer(main_cfg, info_printer):
     if main_cfg.visualizer.method == "naruto":
         info_printer("Initialize Visualizer...", 0, "NARUTO")
         from src.visualization.naruto_visualizer import NARUTOVisualizer
-        visualizer = NARUTOVisualizer(
-            main_cfg,
-            info_printer
-            ) 
+
+        visualizer = NARUTOVisualizer(main_cfg, info_printer)
     elif main_cfg.visualizer.method in ["active_lang", "active_gs"]:
         info_printer("Initialize Visualizer...", 0, "ActiveLang")
         from src.visualization.active_lang_visualizer import ActiveLangVisualizer
-        visualizer = ActiveLangVisualizer(
-            main_cfg,
-            info_printer
-            ) 
+
+        visualizer = ActiveLangVisualizer(main_cfg, info_printer)
     else:
-        assert False, f"Visualizer choices: [naruto, active_lang]. Current option: [{main_cfg.visualizer}]"
+        assert False, (
+            f"Visualizer choices: [naruto, active_lang]. Current option: [{main_cfg.visualizer}]"
+        )
     return visualizer

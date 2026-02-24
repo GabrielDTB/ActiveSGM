@@ -22,7 +22,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 
-
 import argparse
 import numpy as np
 import torch
@@ -33,14 +32,15 @@ def argument_parsing() -> argparse.Namespace:
 
     Returns:
         args: arguments
-        
+
     """
     parser = argparse.ArgumentParser(
-            description="Arguments to export pose from checkpoint."
-        )
+        description="Arguments to export pose from checkpoint."
+    )
     parser.add_argument("--ckpt", type=str, help="Checkpoint path")
     args = parser.parse_args()
     return args
+
 
 if __name__ == "__main__":
     args = argument_parsing()
@@ -55,10 +55,9 @@ if __name__ == "__main__":
     ##################################################
     ### read pose and save as npy
     ##################################################
-    poses_tensor = ckpt['pose']
+    poses_tensor = ckpt["pose"]
     poses = []
     for i in range(len(poses_tensor)):
         poses.append(poses_tensor[i].detach().cpu().numpy())
     poses = np.stack(poses)
     np.save(npy_path, poses)
-    

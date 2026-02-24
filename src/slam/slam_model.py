@@ -22,30 +22,30 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 
-
 import mmengine
 from tensorboardX import SummaryWriter
 
 from src.utils.general_utils import InfoPrinter
 
 
-class SlamModel():
-    def __init__(self, 
-                 main_cfg    : mmengine.Config,
-                 info_printer: InfoPrinter,
-                 tb_logger   : SummaryWriter = None
-                 ) -> None:
+class SlamModel:
+    def __init__(
+        self,
+        main_cfg: mmengine.Config,
+        info_printer: InfoPrinter,
+        tb_logger: SummaryWriter = None,
+    ) -> None:
         """
         Args:
             main_cfg (mmengine.Config): Configuration
             info_printer (InfoPrinter): information printer
             tb_logger (SummaryWriter): Tensorboard Writer
-    
+
         Attributes:
             main_cfg (mmengine.Config): configurations
             slam_cfg (mmengine.Config): slam model configurations
             tb_logger (SummaryWriter): Tensorboard Writer
-            
+
         """
         self.main_cfg = main_cfg
         self.slam_cfg = main_cfg.slam
@@ -54,24 +54,24 @@ class SlamModel():
             self.tb_logger = tb_logger
 
     def update_step(self, step):
-        """ update step information
-    
+        """update step information
+
         Args:
             step (int): step size
-    
+
         """
         self.step = step
 
     def save_mesh(self):
         """
-    
+
         Args:
-            
-    
+
+
         Returns:
-            
-    
+
+
         Attributes:
-            
+
         """
         raise NotImplementedError

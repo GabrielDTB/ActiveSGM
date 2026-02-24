@@ -22,14 +22,13 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 
-
 import torch
 import torch.nn as nn
 
 
 class Projection(nn.Module):
-    """Layer which projects 3D points into a camera view
-    """
+    """Layer which projects 3D points into a camera view"""
+
     def __init__(self, height, width, eps=1e-7):
         super(Projection, self).__init__()
 
@@ -42,7 +41,7 @@ class Projection(nn.Module):
         Args:
             points3d (torch.tensor, [N,4,(HxW)]: 3D points in homogeneous coordinates
             K (torch.tensor, [torch.tensor, (N,4,4)]: camera intrinsics
-            normalized (bool): 
+            normalized (bool):
                 - True: normalized to [-1, 1]
                 - False: [0, W-1] and [0, H-1]
         Returns:

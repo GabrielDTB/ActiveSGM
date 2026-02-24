@@ -22,16 +22,19 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 
-
-''' modified from third_parties/neural_slam_eval/eval_recon.py '''
+""" modified from third_parties/neural_slam_eval/eval_recon.py """
 import argparse
 import os
 import sys
 import trimesh
+
 sys.path.append(os.getcwd())
 
 from src.utils.general_utils import update_results_file
-from third_parties.neural_slam_eval.eval_recon import calc_3d_mesh_metric, get_align_transformation
+from third_parties.neural_slam_eval.eval_recon import (
+    calc_3d_mesh_metric,
+    get_align_transformation,
+)
 
 
 def as_mesh(scene_or_mesh):
@@ -46,10 +49,13 @@ def as_mesh(scene_or_mesh):
         else:
             # we lose texture information here
             mesh = trimesh.util.concatenate(
-                tuple(trimesh.Trimesh(vertices=g.vertices, faces=g.faces)
-                    for g in scene_or_mesh.geometry.values()))
+                tuple(
+                    trimesh.Trimesh(vertices=g.vertices, faces=g.faces)
+                    for g in scene_or_mesh.geometry.values()
+                )
+            )
     else:
-        assert(isinstance(mesh, trimesh.Trimesh))
+        assert isinstance(mesh, trimesh.Trimesh)
         mesh = scene_or_mesh
     return mesh
 
@@ -58,12 +64,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Arguments to evaluate the reconstruction."
     )
-    parser.add_argument("--rec_mesh", type=str,
-                        help="reconstructed mesh file path")
-    parser.add_argument("--gt_mesh", type=str,
-                        help="ground truth mesh file path")
-    parser.add_argument("--align",
-                        action="store_true", help="Align meshes")
+    parser.add_argument("--rec_mesh", type=str, help="reconstructed mesh file path")
+    parser.add_argument("--gt_mesh", type=str, help="ground truth mesh file path")
+    parser.add_argument("--align", action="store_true", help="Align meshes")
     parser.add_argument("--result_txt", type=str, help="result txt")
     args = parser.parse_args()
 
@@ -73,9 +76,9 @@ if __name__ == "__main__":
     mesh_gt = trimesh.load(args.gt_mesh, process=False)
     mesh_rec = trimesh.load(args.rec_mesh, process=False)
 
-    if args.gt_mesh.endswith('obj'):
+    if args.gt_mesh.endswith("obj"):
         mesh_gt = as_mesh(mesh_gt)
-    
+
     ##################################################
     ### align reconstructed mesh to GT mesh
     ##################################################
@@ -87,7 +90,7 @@ if __name__ == "__main__":
     ### evaluate
     ##################################################
     eval_result = calc_3d_mesh_metric(mesh_gt, mesh_rec)
-    
+
     ##################################################
     ### print and save result
     ##################################################

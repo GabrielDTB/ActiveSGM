@@ -22,14 +22,15 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 
-
 import mmengine
 
 from src.utils.general_utils import InfoPrinter
 from tensorboardX import SummaryWriter
 
 
-def init_SLAM_model(main_cfg: mmengine.Config, info_printer: InfoPrinter, logger: SummaryWriter = None):
+def init_SLAM_model(
+    main_cfg: mmengine.Config, info_printer: InfoPrinter, logger: SummaryWriter = None
+):
     """initialize SLAM model
 
     Args:
@@ -47,20 +48,26 @@ def init_SLAM_model(main_cfg: mmengine.Config, info_printer: InfoPrinter, logger
     if main_cfg.slam.method == "coslam":
         info_printer("Initialize Co-SLAM...", 0, "Co-SLAM")
         from src.slam.coslam.coslam import CoSLAMNaruto as CoSLAM
+
         slam = CoSLAM(main_cfg, info_printer)
     elif main_cfg.slam.method == "splatam":
         info_printer("Initialize SplaTAM...", 0, "SplaTAM")
         # from src.slam.semsplatam.semsplatamv2 import SemSplatamNaruto as SplaTAM
         from src.slam.splatam.splatam import SplatamOurs as SplaTAM
+
         slam = SplaTAM(main_cfg, info_printer, logger)
     elif main_cfg.slam.method == "semsplatam":
         info_printer("Initialize semsplatam...", 0, "semsplatam")
         from src.slam.semsplatam.semsplatam import SemSplatam as SemsplaTAM
+
         slam = SemsplaTAM(main_cfg, info_printer, logger)
     elif main_cfg.slam.method == "sgsslam":
         info_printer("Initialize sgsslam...", 0, "sgsslam")
         from src.slam.sgsslam.sgsslam import SGSSLAMOurs as SGSSLAM
+
         slam = SGSSLAM(main_cfg, info_printer, logger)
     else:
-            assert False, f"SLAM choices: [coslam, splatam, semsplatam,sgsslam]. Current option: [{main_cfg.slam.method}]"
+        assert False, (
+            f"SLAM choices: [coslam, splatam, semsplatam,sgsslam]. Current option: [{main_cfg.slam.method}]"
+        )
     return slam

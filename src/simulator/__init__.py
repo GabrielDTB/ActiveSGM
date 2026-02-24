@@ -22,7 +22,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 
-
 import mmengine
 
 from src.utils.general_utils import InfoPrinter
@@ -45,17 +44,15 @@ def init_simulator(main_cfg: mmengine.Config, info_printer: InfoPrinter):
     if main_cfg.sim.method == "habitat":
         info_printer("Initialize Simulator...", 0, "HabitatSim")
         from src.simulator.habitat_simulator import HabitatSim
-        sim = HabitatSim(
-            main_cfg,
-            info_printer
-            ) 
+
+        sim = HabitatSim(main_cfg, info_printer)
     elif main_cfg.sim.method == "habitat_v2":
         info_printer("Initialize Simulator...", 0, "HabitatSimV2")
         from src.simulator.habitat_simulator import HabitatSimV2 as HabitatSim
-        sim = HabitatSim(
-            main_cfg,
-            info_printer
-            ) 
+
+        sim = HabitatSim(main_cfg, info_printer)
     else:
-        assert False, f"Simulator choices: [habitat]. Current option: [{main_cfg.sim.method}]"
+        assert False, (
+            f"Simulator choices: [habitat]. Current option: [{main_cfg.sim.method}]"
+        )
     return sim

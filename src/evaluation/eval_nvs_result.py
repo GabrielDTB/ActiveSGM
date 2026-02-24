@@ -22,9 +22,9 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 
-
 import os
 import sys
+
 sys.path.append(os.getcwd())
 from tensorboardX import SummaryWriter
 
@@ -49,7 +49,7 @@ if __name__ == "__main__":
     args = argument_parsing()
     info_printer("Loading configuration...", 0, "Initialization")
     main_cfg = load_cfg(args)
-    main_cfg.dump(os.path.join(main_cfg.dirs.result_dir, 'main_cfg.json'))
+    main_cfg.dump(os.path.join(main_cfg.dirs.result_dir, "main_cfg.json"))
     info_printer.update_total_step(main_cfg.general.num_iter)
     info_printer.update_scene(main_cfg.general.dataset + " - " + main_cfg.general.scene)
 
@@ -64,8 +64,8 @@ if __name__ == "__main__":
     ##################################################
     log_savedir = os.path.join(main_cfg.dirs.result_dir, "logger")
     os.makedirs(log_savedir, exist_ok=True)
-    logger = SummaryWriter(f'{log_savedir}')
-    
+    logger = SummaryWriter(f"{log_savedir}")
+
     ##################################################
     ### initialize SLAM module
     ##################################################
@@ -76,7 +76,9 @@ if __name__ == "__main__":
     ### Save Final Mesh and Checkpoint
     ##################################################
     # slam.print_and_save_result()
-    slam.eval_result(eval_dir_suffix=args.stage, ignore_first_frame=True, save_frames=True)
+    slam.eval_result(
+        eval_dir_suffix=args.stage, ignore_first_frame=True, save_frames=True
+    )
 
     ##################################################
     ### Runtime Analysis

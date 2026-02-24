@@ -22,14 +22,11 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 
-
 import argparse
 import mmengine
 
-def override_cfg(
-        args: argparse.Namespace,
-        cfg : mmengine.Config
-    ) -> mmengine.Config:
+
+def override_cfg(args: argparse.Namespace, cfg: mmengine.Config) -> mmengine.Config:
     """override configuration
 
     Args:
@@ -59,21 +56,28 @@ def argument_parsing() -> argparse.Namespace:
 
     Returns:
         args: arguments
-        
+
     """
-    parser = argparse.ArgumentParser(
-            description="Arguments to run NARUTO."
-        )
-    parser.add_argument("--cfg", type=str, default="configs/default.py",
-                        help="NARUTO config")
-    parser.add_argument("--result_dir", type=str, default=None, 
-                        help="result directory")
-    parser.add_argument("--seed", type=int, default=None,
-                        help="random seed; also used as the initial pose idx for Replica")
-    parser.add_argument("--enable_vis", type=int, default=None,
-                        help="enable visualization. 1: True, 0: False")
-    parser.add_argument("--stage", type=str, default='final',
-                        help="ONLY for SplaTAM result evaluation ")
+    parser = argparse.ArgumentParser(description="Arguments to run NARUTO.")
+    parser.add_argument(
+        "--cfg", type=str, default="configs/default.py", help="NARUTO config"
+    )
+    parser.add_argument("--result_dir", type=str, default=None, help="result directory")
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=None,
+        help="random seed; also used as the initial pose idx for Replica",
+    )
+    parser.add_argument(
+        "--enable_vis",
+        type=int,
+        default=None,
+        help="enable visualization. 1: True, 0: False",
+    )
+    parser.add_argument(
+        "--stage", type=str, default="final", help="ONLY for SplaTAM result evaluation "
+    )
     args = parser.parse_args()
     return args
 

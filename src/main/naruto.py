@@ -22,9 +22,9 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 
-
 import os
 import sys
+
 sys.path.append(os.getcwd())
 
 from src.data.pose_loader import habitat_pose_conversion, PoseLoader
@@ -56,7 +56,7 @@ if __name__ == "__main__":
     ##################################################
     info_printer("Fix random seed...", 0, "Initialization")
     fix_random_seed(main_cfg.general.seed)
-    
+
     ##################################################
     ### initialize simulator
     ##################################################
@@ -72,7 +72,7 @@ if __name__ == "__main__":
     ##################################################
     planner = init_planner(main_cfg, info_printer)
     planner.update_sim(sim)
-    planner.init_data(slam.config['mapping']['bound'])
+    planner.init_data(slam.config["mapping"]["bound"])
     planner.init_local_planner()
 
     ##################################################
@@ -98,7 +98,7 @@ if __name__ == "__main__":
         ##################################################
         c2w_slam = pose_loader.update_pose(c2w_slam, i)
         c2w_sim = c2w_slam.cpu().numpy().copy()
-        
+
         ##################################################
         ### Simulation
         ##################################################
@@ -107,7 +107,7 @@ if __name__ == "__main__":
         if main_cfg.visualizer.vis_rgbd:
             visualizer.visualize_rgbd(color, depth, slam.config["cam"]["depth_trunc"])
         timer.end("Simulation")
-        
+
         ##################################################
         ### save data for comprehensive visualization
         ##################################################
@@ -120,7 +120,7 @@ if __name__ == "__main__":
         timer.start("SLAM", "General")
         new_uncert_sdf_vols = slam.online_recon_step(i, color, depth, c2w_slam)
         timer.end("SLAM")
-        
+
         ##################################################
         ### Active Planning
         ##################################################
@@ -132,17 +132,17 @@ if __name__ == "__main__":
                 is_new_vols = True
             else:
                 is_new_vols = False
-            c2w_slam = planner.main(
-                uncert_sdf, 
-                c2w_slam.cpu().numpy(), 
-                is_new_vols
-                )
+            c2w_slam = planner.main(uncert_sdf, c2w_slam.cpu().numpy(), is_new_vols)
             timer.end("Planning")
 
     ##################################################
     ### Save Final Mesh and Checkpoint
     ##################################################
-    slam.save_mesh(main_cfg.general.num_iter, voxel_size=slam.config['mesh']['voxel_final'], suffix='_final')
+    slam.save_mesh(
+        main_cfg.general.num_iter,
+        voxel_size=slam.config["mesh"]["voxel_final"],
+        suffix="_final",
+    )
     slam.save_ckpt(main_cfg.general.num_iter, suffix="_final")
 
     ##################################################
