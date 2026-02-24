@@ -17,7 +17,6 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 
 from src.slam.splatam.splatam import SplatamOurs
-from src.slam.splatam.eval_helper import eval, report_progress
 from src.utils.general_utils import InfoPrinter
 from src.slam.splatam.exploration_map import ExplorationMap
 from third_parties.splatam.utils.slam_external import calc_psnr, calc_ssim, build_rotation
@@ -37,6 +36,10 @@ from diff_gaussian_rasterization import GaussianRasterizer as Renderer
 from sparse_channel_rasterization import GaussianRasterizer as SEMRenderer_sparse
 
 from src.slam.splatam.modified_ver.scripts.splatam import *
+# Re-import after wildcard to prevent shadowing by base SplaTAM versions.
+# The eval_helper versions use gt poses (rel_w2c) from the eval dataset and
+# support the eval_dir parameter for saving progress plots.
+from src.slam.splatam.eval_helper import eval, report_progress
 from src.slam.scenesplat.modified_ver.splatam.splatam import (
     setup_camera,
     initialize_first_timestep,
@@ -52,6 +55,9 @@ from src.slam.scenesplat.scenesplat_model import (
     load_autoencoder,
     run_scenesplat,
 )
+from src.slam.semsplatam.modified_ver.scripts.splatam import (
+    get_dataset as get_dataset_habitat,
+)
 
 PRINT_INFO = True
 
@@ -62,6 +68,11 @@ class SceneSplatam(SplatamOurs):
                  info_printer: InfoPrinter,
                  logger: SummaryWriter) -> None:
         SplatamOurs.__init__(self, main_cfg, info_printer, logger)
+
+        # Reload all datasets using modified ReplicaDataset that looks in
+        # results_habitat/ instead of results/ (matching SemSplatam's behavior
+        # where a shadowed import makes all datasets use results_habitat/).
+        self._reload_datasets()
 
         # SceneSplat configuration
         self.n_cls = self.slam_cfg.get('num_semantic_classes', 16)
@@ -78,6 +89,89 @@ class SceneSplatam(SplatamOurs):
         autoencoder_ckpt = self.slam_cfg['autoencoder_checkpoint']
         print(f"Loading Autoencoder from {autoencoder_ckpt}...")
         self.autoencoder = load_autoencoder(autoencoder_ckpt, self.device)
+
+    def _reload_datasets(self):
+        """Reload all datasets using modified ReplicaDataset that reads from results_habitat/.
+
+        SemSplatam achieves this via a shadowed import (line 42 overrides line 22),
+        which makes all get_dataset calls use the modified ReplicaDataset. Since
+        SceneSplatam extends SplatamOurs (which uses the base get_dataset), we
+        must explicitly reload all datasets here.
+        """
+        dataset_config = self.config["data"]
+        if "gradslam_data_cfg" not in dataset_config:
+            gradslam_data_cfg = {"dataset_name": dataset_config["dataset_name"]}
+        else:
+            gradslam_data_cfg = load_dataset_config(dataset_config["gradslam_data_cfg"])
+
+        # Reload training dataset (used for initialize_first_timestep)
+        self.dataset_sample = get_dataset_habitat(
+            config_dict=gradslam_data_cfg,
+            basedir=dataset_config["basedir"],
+            sequence=os.path.basename(dataset_config["sequence"]),
+            start=dataset_config["start"],
+            end=dataset_config["end"],
+            stride=dataset_config["stride"],
+            desired_height=dataset_config["desired_image_height"],
+            desired_width=dataset_config["desired_image_width"],
+            device=self.device,
+            relative_pose=True,
+            ignore_bad=dataset_config.get("ignore_bad", False),
+            use_train_split=dataset_config.get("use_train_split", True),
+        )
+
+        # Reload eval dataset
+        self.dataset_eval = get_dataset_habitat(
+            config_dict=gradslam_data_cfg,
+            basedir=self.slam_cfg.dataset_eval_basedir,
+            sequence=os.path.basename(dataset_config["sequence"]),
+            start=dataset_config["start"],
+            end=dataset_config["end"],
+            stride=dataset_config["stride"],
+            desired_height=dataset_config["desired_image_height"],
+            desired_width=dataset_config["desired_image_width"],
+            device=self.device,
+            relative_pose=True,
+            ignore_bad=dataset_config.get("ignore_bad", False),
+            use_train_split=dataset_config.get("use_train_split", True),
+        )
+
+        # Reload densification dataset if separate resolution
+        if self.seperate_densification_res:
+            self.densify_dataset_sample = get_dataset_habitat(
+                config_dict=gradslam_data_cfg,
+                basedir=dataset_config["basedir"],
+                sequence=os.path.basename(dataset_config["sequence"]),
+                start=dataset_config["start"],
+                end=dataset_config["end"],
+                stride=dataset_config["stride"],
+                desired_height=dataset_config["densification_image_height"],
+                desired_width=dataset_config["densification_image_width"],
+                device=self.device,
+                relative_pose=True,
+                ignore_bad=dataset_config.get("ignore_bad", False),
+                use_train_split=dataset_config.get("use_train_split", True),
+            )
+
+        # Reload tracking dataset if separate resolution
+        if self.seperate_tracking_res:
+            self.tracking_dataset_sample = get_dataset_habitat(
+                config_dict=gradslam_data_cfg,
+                basedir=dataset_config["basedir"],
+                sequence=os.path.basename(dataset_config["sequence"]),
+                start=dataset_config["start"],
+                end=dataset_config["end"],
+                stride=dataset_config["stride"],
+                desired_height=dataset_config["tracking_image_height"],
+                desired_width=dataset_config["tracking_image_width"],
+                device=self.device,
+                relative_pose=True,
+                ignore_bad=dataset_config.get("ignore_bad", False),
+                use_train_split=dataset_config.get("use_train_split", True),
+            )
+            tracking_color, _, tracking_intrinsics, _ = self.tracking_dataset_sample[0]
+            self.tracking_color = tracking_color.permute(2, 0, 1) / 255
+            self.tracking_intrinsics = tracking_intrinsics[:3, :3]
 
     def init_exploration_map(self, sim2slam: torch.tensor):
         """Initialize exploration map (grid)."""
@@ -831,7 +925,7 @@ class SceneSplatam(SplatamOurs):
         print(f"Average Mapping/Frame Time: {mapping_frame_time_avg} s")
 
         # Evaluate Final Parameters (RGB only, no semantic eval)
-        dataset = self.dataset_sample
+        dataset = self.dataset_eval
         with torch.no_grad():
             if config['use_wandb']:
                 eval(dataset, params, len(dataset), eval_dir,

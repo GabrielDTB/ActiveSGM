@@ -1,0 +1,73 @@
+# SceneSplat Integration — Additional Context (Session 2)
+# Bugs found and fixed after initial implementation.
+
+================================================================================
+BUG FIXES APPLIED
+================================================================================
+
+1. EVAL DATASET VARIABLE (print_and_save_result)
+   - Was using `self.dataset_sample` (training data) instead of `self.dataset_eval`
+   - Fixed: changed to `dataset = self.dataset_eval` in print_and_save_result()
+
+2. MISSING CONFIG KEY: seman_thre
+   - KeyError: 'seman_thre' at step 700 in update_global_keyframe_set_completeness
+   - Fixed: Added `seman_thre = 0.9` to `global_keyframe` dict in
+     configs/Replica/office0/ActiveSceneSplat.py
+
+3. DATASET MISMATCH — results/ vs results_habitat/ (CRITICAL)
+   Root cause: SemSplatam has a SHADOWED IMPORT at line 42 of semsplatam.py:
+     Line 22: from third_parties.splatam.scripts.splatam import get_dataset  (base)
+     Line 42: from src.slam.semsplatam.modified_ver.scripts.splatam import get_dataset  (SHADOWS line 22)
+
+   This means ALL dataset loading in SemSplatam uses the modified ReplicaDataset
+   which reads images from `results_habitat/` instead of `results/`.
+
+   Two different ReplicaDataset classes exist:
+   - Base (third_parties/splatam/datasets/gradslam_datasets/replica.py):
+       reads from `{input_folder}/results/frame*.jpg` and `results/depth*.png`
+   - Modified (src/slam/semsplatam/modified_ver/datasets/gradslam_datasets/replica.py):
+       reads from `{input_folder}/results_habitat/frame*.jpg` and `results_habitat/depth*.png`
+
+   The images in results/ and results_habitat/ are DIFFERENT (confirmed via md5sum).
+   - data/Replica/office0/ has BOTH results/ and results_habitat/ (different images)
+   - data/replica_sim_nvs/office0/ has ONLY results_habitat/ (no results/)
+
+   SceneSplatam extends SplatamOurs (not SemSplatam), so SplatamOurs.__init__
+   creates all datasets using the BASE get_dataset → reads from results/.
+   This caused pose/image mismatch vs SemSplatam.
+
+   Fix attempted in scenesplat.py (NOT YET VERIFIED — may not fully resolve issue):
+   - Renamed _reload_eval_dataset() → _reload_datasets()
+   - Now reloads ALL datasets (dataset_sample, dataset_eval,
+     densify_dataset_sample, tracking_dataset_sample) using get_dataset_habitat
+   - This should match SemSplatam's behavior where the shadowed import affects everything
+   - NEEDS TESTING: run and confirm eval images/poses now match SemSplatam's output
+
+   The import used:
+     from src.slam.semsplatam.modified_ver.scripts.splatam import get_dataset as get_dataset_habitat
+
+================================================================================
+KEY ARCHITECTURAL INSIGHT
+================================================================================
+
+SemSplatam's modified_ver/ contains a chain of modified files:
+  modified_ver/scripts/splatam.py → imports modified get_dataset
+  modified_ver/datasets/gradslam_datasets/replica.py → reads results_habitat/
+
+SceneSplatam reuses this chain via `get_dataset_habitat` import but must
+EXPLICITLY reload datasets since it extends SplatamOurs (which uses base imports).
+
+If you ever add a new dataset loading path in SceneSplatam, make sure to use
+get_dataset_habitat, NOT the base get_dataset from third_parties.
+
+================================================================================
+FILES MODIFIED IN SESSION 2
+================================================================================
+
+1. src/slam/scenesplat/scenesplat.py
+   - print_and_save_result(): dataset_sample → dataset_eval
+   - _reload_eval_dataset() → _reload_datasets(): now reloads ALL datasets
+   - Added get_dataset_habitat import
+
+2. configs/Replica/office0/ActiveSceneSplat.py
+   - Added seman_thre = 0.9 to global_keyframe dict

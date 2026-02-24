@@ -65,6 +65,7 @@ if slam["method"] == "scenesplat":
             quality_method = "relative",
             quality_freq = 100,
             quality_perc_thre = 30,
+            seman_thre = 0.9,
         ),
 
         ##### SceneSplat Network #######
