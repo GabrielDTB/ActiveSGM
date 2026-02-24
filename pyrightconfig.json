@@ -1,0 +1,8 @@
+{
+    "venvPath": ".pixi/envs",
+    "venv": "default",
+    "pythonVersion": "3.11",
+    "pythonPlatform": "Linux",
+    "extraPaths": ["src", "."],
+    "exclude": ["**/__pycache__", ".pixi", "build", "dist"]
+}

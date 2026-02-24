@@ -5,3 +5,6 @@
 *.bin
 *.pth
 /.ruff_cache/
+# pixi environments
+.pixi/*
+!.pixi/config.toml
