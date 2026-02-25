@@ -76,8 +76,13 @@ class SemSplatam(SplatamOurs):
         self.oneformer_processor = AutoProcessor.from_pretrained(
             self.slam_cfg["ade20k_checkpoint"]
         )
+        oneformer_use_safetensors = self.slam_cfg.get("oneformer_use_safetensors", True)
+        oneformer_revision = self.slam_cfg.get("oneformer_checkpoint_revision", None)
         self.oneformer_model = AutoModelForUniversalSegmentation.from_pretrained(
-            self.slam_cfg["oneformer_checkpoint"], is_training=False
+            self.slam_cfg["oneformer_checkpoint"],
+            is_training=False,
+            use_safetensors=oneformer_use_safetensors,
+            revision=oneformer_revision,
         ).to(self.semantic_device)
         self.n_cls = self.slam_cfg["num_semantic_classes"]
         self.topk = self.slam_cfg["num_topk_logits"]
