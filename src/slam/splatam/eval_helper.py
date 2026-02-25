@@ -10,18 +10,19 @@ from diff_gaussian_rasterization import GaussianRasterizer as Renderer
 from pytorch_msssim import ms_ssim
 from torchmetrics.image.lpip import LearnedPerceptualImagePatchSimilarity
 
-sys.path.append("third_parties/splatam")
-from datasets.gradslam_datasets.geometryutils import relative_transformation
-from utils.recon_helpers import setup_camera
-from utils.slam_external import build_rotation, calc_psnr
-from utils.slam_helpers import (
+from third_parties.splatam.datasets.gradslam_datasets.geometryutils import (
+    relative_transformation,
+)
+from third_parties.splatam.utils.recon_helpers import setup_camera
+from third_parties.splatam.utils.slam_external import build_rotation, calc_psnr
+from third_parties.splatam.utils.slam_helpers import (
     # transform_to_frame,
     transformed_params2rendervar,
     transformed_params2depthplussilhouette,
     quat_mult,
     matrix_to_quaternion,
 )
-from utils.eval_helpers import evaluate_ate, plot_rgbd_silhouette
+from third_parties.splatam.utils.eval_helpers import evaluate_ate, plot_rgbd_silhouette
 
 loss_fn_alex = LearnedPerceptualImagePatchSimilarity(
     net_type="alex", normalize=True

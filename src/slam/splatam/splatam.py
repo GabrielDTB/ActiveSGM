@@ -28,9 +28,7 @@ from src.slam.splatam.exploration_map import ExplorationMap
 
 from third_parties.splatam.utils.slam_external import calc_psnr
 
-### original Splatam modules ###
-sys.path.append("third_parties/splatam")
-from scripts.splatam import (
+from third_parties.splatam.scripts.splatam import (
     initialize_first_timestep,
     get_dataset,
     initialize_camera_pose,
@@ -38,20 +36,25 @@ from scripts.splatam import (
     get_loss,
     add_new_gaussians,
 )
-from datasets.gradslam_datasets import (
+from third_parties.splatam.datasets.gradslam_datasets import (
     load_dataset_config,
 )
-from utils.recon_helpers import setup_camera
-from utils.slam_helpers import (
+from third_parties.splatam.utils.recon_helpers import setup_camera
+from third_parties.splatam.utils.slam_helpers import (
     matrix_to_quaternion,
     transform_to_frame,
     transformed_params2rendervar,
     transformed_params2depthplussilhouette,
 )
-from utils.keyframe_selection import keyframe_selection_overlap
-from utils.slam_external import calc_ssim, build_rotation, prune_gaussians, densify
-from utils.eval_helpers import report_loss  # , report_progress
-from utils.common_utils import save_params_ckpt, save_params
+from third_parties.splatam.utils.keyframe_selection import keyframe_selection_overlap
+from third_parties.splatam.utils.slam_external import (
+    calc_ssim,
+    build_rotation,
+    prune_gaussians,
+    densify,
+)
+from third_parties.splatam.utils.eval_helpers import report_loss  # , report_progress
+from third_parties.splatam.utils.common_utils import save_params_ckpt, save_params
 
 # modified version
 from src.slam.splatam.modified_ver.scripts.splatam import *

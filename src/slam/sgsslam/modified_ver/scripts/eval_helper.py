@@ -14,17 +14,18 @@ from src.slam.semsplatam.modified_ver.splatam.eval_helper import calc_miou
 from imgviz import label_colormap
 
 
-sys.path.append("third_parties/splatam")
-from datasets.gradslam_datasets.geometryutils import relative_transformation
-from utils.recon_helpers import setup_camera
-from utils.slam_external import build_rotation, calc_psnr
-from utils.slam_helpers import (
+from third_parties.splatam.datasets.gradslam_datasets.geometryutils import (
+    relative_transformation,
+)
+from third_parties.splatam.utils.recon_helpers import setup_camera
+from third_parties.splatam.utils.slam_external import build_rotation, calc_psnr
+from third_parties.splatam.utils.slam_helpers import (
     transformed_params2rendervar,
     transformed_params2depthplussilhouette,
     quat_mult,
     matrix_to_quaternion,
 )
-from utils.eval_helpers import evaluate_ate
+from third_parties.splatam.utils.eval_helpers import evaluate_ate
 from src.slam.splatam.eval_helper import transform_to_frame
 
 loss_fn_alex = LearnedPerceptualImagePatchSimilarity(
