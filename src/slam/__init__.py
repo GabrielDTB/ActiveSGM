@@ -66,8 +66,13 @@ def init_SLAM_model(
         from src.slam.sgsslam.sgsslam import SGSSLAMOurs as SGSSLAM
 
         slam = SGSSLAM(main_cfg, info_printer, logger)
+    elif main_cfg.slam.method == "scenesplat":
+        info_printer("Initialize SceneSplat...", 0, "SceneSplat")
+        from src.slam.scenesplat.scenesplat import SceneSplatam
+
+        slam = SceneSplatam(main_cfg, info_printer, logger)
     else:
         assert False, (
-            f"SLAM choices: [coslam, splatam, semsplatam,sgsslam]. Current option: [{main_cfg.slam.method}]"
+            f"SLAM choices: [coslam, splatam, semsplatam, sgsslam, scenesplat]. Current option: [{main_cfg.slam.method}]"
         )
     return slam
