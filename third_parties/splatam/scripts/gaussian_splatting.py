@@ -19,18 +19,18 @@ import torch
 from tqdm import tqdm
 import wandb
 
-from datasets.gradslam_datasets import (load_dataset_config, ICLDataset, ReplicaDataset, ReplicaV2Dataset, AzureKinectDataset,
-                                        ScannetDataset, Ai2thorDataset, Record3DDataset, RealsenseDataset, TUMDataset,
-                                        ScannetPPDataset, NeRFCaptureDataset)
-from utils.common_utils import seed_everything, save_params
-from utils.recon_helpers import setup_camera
-from utils.gs_helpers import (
+from ..datasets.gradslam_datasets import (load_dataset_config, ICLDataset, ReplicaDataset, ReplicaV2Dataset, AzureKinectDataset,
+                                          ScannetDataset, Ai2thorDataset, Record3DDataset, RealsenseDataset, TUMDataset,
+                                          ScannetPPDataset, NeRFCaptureDataset)
+from ..utils.common_utils import seed_everything, save_params
+from ..utils.recon_helpers import setup_camera
+from ..utils.gs_helpers import (
     params2rendervar, params2depthplussilhouette,
     transformed_params2depthplussilhouette,
     transform_to_frame, report_progress, eval,
     l1_loss_v1, matrix_to_quaternion
 )
-from utils.gs_external import (
+from ..utils.gs_external import (
     calc_ssim, build_rotation, densify,
     get_expon_lr_func, update_learning_rate
 )
@@ -65,7 +65,7 @@ def get_dataset(config_dict, basedir, sequence, **kwargs):
         raise ValueError(f"Unknown dataset name {config_dict['dataset_name']}")
 
 
-def get_pointcloud(color, depth, intrinsics, w2c, transform_pts=True, 
+def get_pointcloud(color, depth, intrinsics, w2c, transform_pts=True,
                    mask=None, compute_mean_sq_dist=False, mean_sq_dist_method="projective"):
     width, height = color.shape[2], color.shape[1]
     CX = intrinsics[0][2]
@@ -74,7 +74,7 @@ def get_pointcloud(color, depth, intrinsics, w2c, transform_pts=True,
     FY = intrinsics[1][1]
 
     # Compute indices of pixels
-    x_grid, y_grid = torch.meshgrid(torch.arange(width).cuda().float(), 
+    x_grid, y_grid = torch.meshgrid(torch.arange(width).cuda().float(),
                                     torch.arange(height).cuda().float(),
                                     indexing='xy')
     xx = (x_grid - CX)/FX
@@ -101,7 +101,7 @@ def get_pointcloud(color, depth, intrinsics, w2c, transform_pts=True,
             mean3_sq_dist = scale_gaussian**2
         else:
             raise ValueError(f"Unknown mean_sq_dist_method: {mean_sq_dist_method}")
-    
+
     # Colorize point cloud
     cols = torch.permute(color, (1, 2, 0)).reshape(-1, 3) # (C, H, W) -> (H, W, C) -> (H * W, C)
     point_cld = torch.cat((pts, cols), -1)
@@ -171,7 +171,7 @@ def initialize_first_timestep(dataset, num_frames, lrs_dict, mean_sq_dist_method
     # Process RGB-D Data
     color = color.permute(2, 0, 1) / 255 # (H, W, C) -> (C, H, W)
     depth = depth.permute(2, 0, 1) # (H, W, C) -> (C, H, W)
-    
+
     # Process Camera Parameters
     intrinsics = intrinsics[:3, :3]
     w2c = torch.linalg.inv(pose)
@@ -220,7 +220,7 @@ def get_loss_gs(params, curr_data, variables, loss_weights):
 
     # RGB Loss
     losses['im'] = 0.8 * l1_loss_v1(im, curr_data['im']) + 0.2 * (1.0 - calc_ssim(im, curr_data['im']))
-    
+
     # Depth Loss
     losses['depth'] = l1_loss_v1(depth, curr_data['depth'])
 
@@ -262,7 +262,7 @@ def initialize_new_params(new_pt_cld, mean3_sq_dist, gaussian_distribution):
     return params
 
 
-def add_new_gaussians(params, variables, curr_data, sil_thres, 
+def add_new_gaussians(params, variables, curr_data, sil_thres,
                       time_idx, mean_sq_dist_method, gaussian_distribution):
     # Silhouette Rendering
     transformed_gaussians = transform_to_frame(params, time_idx, gaussians_grad=False, camera_grad=False)
@@ -291,7 +291,7 @@ def add_new_gaussians(params, variables, curr_data, sil_thres,
         curr_w2c[:3, 3] = curr_cam_tran
         valid_depth_mask = (curr_data['depth'][0, :, :] > 0)
         non_presence_mask = non_presence_mask & valid_depth_mask.reshape(-1)
-        new_pt_cld, mean3_sq_dist = get_pointcloud(curr_data['im'], curr_data['depth'], curr_data['intrinsics'], 
+        new_pt_cld, mean3_sq_dist = get_pointcloud(curr_data['im'], curr_data['depth'], curr_data['intrinsics'],
                                     curr_w2c, mask=non_presence_mask, compute_mean_sq_dist=True,
                                     mean_sq_dist_method=mean_sq_dist_method)
         new_params = initialize_new_params(new_pt_cld, mean3_sq_dist, gaussian_distribution)
@@ -403,7 +403,7 @@ def offline_splatting(config: dict):
     if eval_num_frames == -1:
         eval_num_frames = len(eval_dataset)
     # Initialize Parameters, Optimizer & Canoncial Camera parameters
-    params, variables, optimizer, intrinsics, w2c, cam = initialize_first_timestep(dataset, num_frames, 
+    params, variables, optimizer, intrinsics, w2c, cam = initialize_first_timestep(dataset, num_frames,
                                                                                    config['train']['lrs_mapping'],
                                                                                    config['mean_sq_dist_method'],
                                                                                    config['gaussian_distribution'])
@@ -426,8 +426,8 @@ def offline_splatting(config: dict):
         depth_all_frames.append(depth)
         gt_w2c_all_frames.append(gt_w2c)
         # Setup Gaussian Splatting Camera
-        gs_cam = setup_camera(color.shape[2], color.shape[1], 
-                              intrinsics.cpu().numpy(), 
+        gs_cam = setup_camera(color.shape[2], color.shape[1],
+                              intrinsics.cpu().numpy(),
                               gt_w2c.detach().cpu().numpy())
         gs_cams_all_frames.append(gs_cam)
 
@@ -447,8 +447,8 @@ def offline_splatting(config: dict):
         depth_all_frames_map.append(depth)
         gt_w2c_all_frames_map.append(gt_w2c)
         # Setup Gaussian Splatting Camera
-        gs_cam = setup_camera(color.shape[2], color.shape[1], 
-                              map_intrinsics.cpu().numpy(), 
+        gs_cam = setup_camera(color.shape[2], color.shape[1],
+                              map_intrinsics.cpu().numpy(),
                               gt_w2c.detach().cpu().numpy())
         gs_cams_all_frames_map.append(gs_cam)
 
@@ -462,7 +462,7 @@ def offline_splatting(config: dict):
         color = color_all_frames[iter_time_idx]
         depth = depth_all_frames[iter_time_idx]
         curr_gt_w2c = gt_w2c_all_frames[:iter_time_idx+1]
-        curr_data = {'cam': cam, 'im': color, 'depth': depth, 'id': iter_time_idx, 
+        curr_data = {'cam': cam, 'im': color, 'depth': depth, 'id': iter_time_idx,
                      'intrinsics': intrinsics, 'w2c': w2c, 'iter_gt_w2c_list': curr_gt_w2c}
 
         # Use GT Poses for Tracking
@@ -475,10 +475,10 @@ def offline_splatting(config: dict):
             # Update the camera parameters
             params['cam_unnorm_rots'][..., time_idx] = rel_w2c_rot_quat
             params['cam_trans'][..., time_idx] = rel_w2c_tran
-        
+
         # Add new Gaussians to the scene based on the Silhouette
         if time_idx > 0:
-            params, variables = add_new_gaussians(params, variables, curr_data, 
+            params, variables = add_new_gaussians(params, variables, curr_data,
                                                   config['train']['sil_thres'], time_idx,
                                                   config['mean_sq_dist_method'], config['gaussian_distribution'])
         post_num_pts = params['means3D'].shape[0]
@@ -488,11 +488,11 @@ def offline_splatting(config: dict):
 
         # Reset Optimizer & Learning Rates for Full Map Optimization
         optimizer = initialize_optimizer(params, config['train']['lrs_mapping'])
-        means3D_scheduler = get_expon_lr_func(lr_init=config['train']['lrs_mapping']['means3D'], 
+        means3D_scheduler = get_expon_lr_func(lr_init=config['train']['lrs_mapping']['means3D'],
                                               lr_final=config['train']['lrs_mapping_means3D_final'],
                                               lr_delay_mult=config['train']['lr_delay_mult'],
                                               max_steps=config['train']['num_iters_mapping'])
-        
+
         # Mapping
         if (time_idx + 1) == num_frames:
             if num_iters_mapping > 0:
@@ -509,8 +509,8 @@ def offline_splatting(config: dict):
                 iter_depth = depth_all_frames_map[iter_time_idx]
                 iter_gt_w2c = gt_w2c_all_frames_map[:iter_time_idx+1]
                 iter_gs_cam = gs_cams_all_frames_map[iter_time_idx]
-                iter_data = {'cam': iter_gs_cam, 'im': iter_color, 'depth': iter_depth, 
-                             'id': iter_time_idx, 'intrinsics': map_intrinsics, 
+                iter_data = {'cam': iter_gs_cam, 'im': iter_color, 'depth': iter_depth,
+                             'id': iter_time_idx, 'intrinsics': map_intrinsics,
                              'w2c': gt_w2c_all_frames_map[iter_time_idx], 'iter_gt_w2c_list': iter_gt_w2c}
                 # Loss for current frame
                 loss, variables, losses = get_loss_gs(params, iter_data, variables, config['train']['loss_weights'])
@@ -528,11 +528,11 @@ def offline_splatting(config: dict):
                     # Report Progress
                     if config['report_iter_progress']:
                         if config['use_wandb']:
-                            report_progress(params, iter_data, iter+1, progress_bar, iter_time_idx, sil_thres=config['train']['sil_thres'], 
+                            report_progress(params, iter_data, iter+1, progress_bar, iter_time_idx, sil_thres=config['train']['sil_thres'],
                                             wandb_run=wandb_run, wandb_step=wandb_step, wandb_save_qual=config['wandb']['save_qual'],
                                             mapping=True, online_time_idx=time_idx)
                         else:
-                            report_progress(params, iter_data, iter+1, progress_bar, iter_time_idx, sil_thres=config['train']['sil_thres'], 
+                            report_progress(params, iter_data, iter+1, progress_bar, iter_time_idx, sil_thres=config['train']['sil_thres'],
                                             mapping=True, online_time_idx=time_idx)
                     else:
                         progress_bar.update(1)
@@ -582,7 +582,7 @@ def offline_splatting(config: dict):
     for gt_w2c_tensor in gt_w2c_all_frames:
         params['gt_w2c_all_frames'].append(gt_w2c_tensor.detach().cpu().numpy())
     params['gt_w2c_all_frames'] = np.stack(params['gt_w2c_all_frames'], axis=0)
-    
+
     # Save Parameters
     save_params(params, output_dir)
 
@@ -603,7 +603,7 @@ if __name__ == "__main__":
 
     # Set Experiment Seed
     seed_everything(seed=experiment.config['seed'])
-    
+
     # Create Results Directory and Copy Config
     results_dir = os.path.join(
         experiment.config["workdir"], experiment.config["run_name"]

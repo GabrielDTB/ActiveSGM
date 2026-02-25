@@ -25,14 +25,14 @@ import torch
 import torch.nn.functional as F
 from tqdm import tqdm
 
-from datasets.gradslam_datasets.geometryutils import relative_transformation
-from utils.common_utils import seed_everything, save_params_ckpt, save_params
-from utils.eval_helpers import report_progress
-from utils.keyframe_selection import keyframe_selection_overlap
-from utils.recon_helpers import setup_camera
-from utils.slam_external import build_rotation, prune_gaussians, densify
-from utils.slam_helpers import matrix_to_quaternion
-from scripts.splatam import get_loss, initialize_optimizer, initialize_params, initialize_camera_pose, get_pointcloud, add_new_gaussians
+from ..datasets.gradslam_datasets.geometryutils import relative_transformation
+from ..utils.common_utils import seed_everything, save_params_ckpt, save_params
+from ..utils.eval_helpers import report_progress
+from ..utils.keyframe_selection import keyframe_selection_overlap
+from ..utils.recon_helpers import setup_camera
+from ..utils.slam_external import build_rotation, prune_gaussians, densify
+from ..utils.slam_helpers import matrix_to_quaternion
+from .splatam import get_loss, initialize_optimizer, initialize_params, initialize_camera_pose, get_pointcloud, add_new_gaussians
 
 from diff_gaussian_rasterization import GaussianRasterizer as Renderer
 
@@ -213,7 +213,7 @@ def dataset_capture_loop(reader: DataReader, save_path: Path, overwrite: bool, n
             gt_pose = relative_transformation(first_abs_gt_pose.unsqueeze(0), gt_pose.unsqueeze(0), orthogonal_rotations=False)
             gt_w2c = torch.linalg.inv(gt_pose[0])
             gt_w2c_all_frames.append(gt_w2c)
-            
+
             # Initialize Tracking & Mapping Resolution Data
             color = cv2.resize(image, dsize=(
                 config['data']['desired_image_width'], config['data']['desired_image_height']), interpolation=cv2.INTER_LINEAR)
@@ -230,7 +230,7 @@ def dataset_capture_loop(reader: DataReader, save_path: Path, overwrite: bool, n
                 intrinsics[2, 2] = 1.0
                 first_frame_w2c = torch.eye(4).cuda().float()
                 cam = setup_camera(color.shape[2], color.shape[1], intrinsics.cpu().numpy(), first_frame_w2c.cpu().numpy())
-            
+
             # Initialize Densification Resolution Data
             densify_color = cv2.resize(image, dsize=(
                 config['data']['densification_image_width'], config['data']['densification_image_height']), interpolation=cv2.INTER_LINEAR)
@@ -246,28 +246,28 @@ def dataset_capture_loop(reader: DataReader, save_path: Path, overwrite: bool, n
                 densify_intrinsics = densify_intrinsics / config['data']['densify_downscale_factor']
                 densify_intrinsics[2, 2] = 1.0
                 densify_cam = setup_camera(densify_color.shape[2], densify_color.shape[1], densify_intrinsics.cpu().numpy(), first_frame_w2c.cpu().numpy())
-            
+
             # Initialize Params for first time step
             if time_idx == 0:
                 # Get Initial Point Cloud
                 mask = (densify_depth > 0) # Mask out invalid depth values
                 mask = mask.reshape(-1)
-                init_pt_cld, mean3_sq_dist = get_pointcloud(densify_color, densify_depth, densify_intrinsics, first_frame_w2c, 
-                                                            mask=mask, compute_mean_sq_dist=True, 
+                init_pt_cld, mean3_sq_dist = get_pointcloud(densify_color, densify_depth, densify_intrinsics, first_frame_w2c,
+                                                            mask=mask, compute_mean_sq_dist=True,
                                                             mean_sq_dist_method=config['mean_sq_dist_method'])
                 params, variables = initialize_params(init_pt_cld, num_frames, mean3_sq_dist, config['gaussian_distribution'])
                 variables['scene_radius'] = torch.max(densify_depth)/config['scene_radius_depth_ratio']
-            
+
             # Initialize Mapping & Tracking for current frame
             iter_time_idx = time_idx
             curr_gt_w2c = gt_w2c_all_frames
-            curr_data = {'cam': cam, 'im': color, 'depth':depth, 'id': iter_time_idx, 
+            curr_data = {'cam': cam, 'im': color, 'depth':depth, 'id': iter_time_idx,
                          'intrinsics': intrinsics, 'w2c': first_frame_w2c, 'iter_gt_w2c_list': curr_gt_w2c}
             tracking_curr_data = curr_data
-            
+
             # Optimization Iterations
             num_iters_mapping = config['mapping']['num_iters']
-            
+
             # Initialize the camera pose for the current frame
             if time_idx > 0:
                 params = initialize_camera_pose(params, time_idx, forward_prop=config['tracking']['forward_prop'])
@@ -291,7 +291,7 @@ def dataset_capture_loop(reader: DataReader, save_path: Path, overwrite: bool, n
                     # Loss for current frame
                     loss, variables, losses = get_loss(params, tracking_curr_data, variables, iter_time_idx, config['tracking']['loss_weights'],
                                                     config['tracking']['use_sil_for_loss'], config['tracking']['sil_thres'],
-                                                    config['tracking']['use_l1'], config['tracking']['ignore_outlier_depth_loss'], tracking=True, 
+                                                    config['tracking']['use_l1'], config['tracking']['ignore_outlier_depth_loss'], tracking=True,
                                                     visualize_tracking_loss=config['tracking']['visualize_tracking_loss'],
                                                     tracking_iteration=iter)
                     # Backprop
@@ -358,19 +358,19 @@ def dataset_capture_loop(reader: DataReader, save_path: Path, overwrite: bool, n
                     os.makedirs(ckpt_output_dir, exist_ok=True)
                     save_params_ckpt(params, ckpt_output_dir, time_idx)
                     print('Failed to evaluate trajectory.')
-            
+
             # Densification & KeyFrame-based Mapping
             if time_idx == 0 or (time_idx+1) % config['map_every'] == 0:
                 # Densification
                 if config['mapping']['add_new_gaussians'] and time_idx > 0:
-                    densify_curr_data = {'cam': densify_cam, 'im': densify_color, 'depth': densify_depth, 'id': time_idx, 
+                    densify_curr_data = {'cam': densify_cam, 'im': densify_color, 'depth': densify_depth, 'id': time_idx,
                                 'intrinsics': densify_intrinsics, 'w2c': first_frame_w2c, 'iter_gt_w2c_list': curr_gt_w2c}
 
                     # Add new Gaussians to the scene based on the Silhouette
-                    params, variables = add_new_gaussians(params, variables, densify_curr_data, 
+                    params, variables = add_new_gaussians(params, variables, densify_curr_data,
                                                         config['mapping']['sil_thres'], time_idx,
                                                         config['mean_sq_dist_method'], config['gaussian_distribution'])
-                
+
                 with torch.no_grad():
                     # Get the current estimated rotation & translation
                     curr_cam_rot = F.normalize(params['cam_unnorm_rots'][..., time_idx].detach())
@@ -393,7 +393,7 @@ def dataset_capture_loop(reader: DataReader, save_path: Path, overwrite: bool, n
                     print(f"\nSelected Keyframes at Frame {time_idx}: {selected_time_idx}")
 
                 # Reset Optimizer & Learning Rates for Full Map Optimization
-                optimizer = initialize_optimizer(params, config['mapping']['lrs'], tracking=False) 
+                optimizer = initialize_optimizer(params, config['mapping']['lrs'], tracking=False)
 
                 # Mapping
                 mapping_start_time = time.time()
@@ -415,7 +415,7 @@ def dataset_capture_loop(reader: DataReader, save_path: Path, overwrite: bool, n
                         iter_color = keyframe_list[selected_rand_keyframe_idx]['color']
                         iter_depth = keyframe_list[selected_rand_keyframe_idx]['depth']
                     iter_gt_w2c = gt_w2c_all_frames[:iter_time_idx+1]
-                    iter_data = {'cam': cam, 'im': iter_color, 'depth': iter_depth, 'id': iter_time_idx, 
+                    iter_data = {'cam': cam, 'im': iter_color, 'depth': iter_depth, 'id': iter_time_idx,
                                 'intrinsics': intrinsics, 'w2c': first_frame_w2c, 'iter_gt_w2c_list': iter_gt_w2c}
                     # Loss for current frame
                     loss, variables, losses = get_loss(params, iter_data, variables, iter_time_idx, config['mapping']['loss_weights'],
@@ -435,7 +435,7 @@ def dataset_capture_loop(reader: DataReader, save_path: Path, overwrite: bool, n
                         optimizer.zero_grad(set_to_none=True)
                         # Report Progress
                         if config['report_iter_progress']:
-                            report_progress(params, iter_data, iter+1, progress_bar, iter_time_idx, sil_thres=config['mapping']['sil_thres'], 
+                            report_progress(params, iter_data, iter+1, progress_bar, iter_time_idx, sil_thres=config['mapping']['sil_thres'],
                                             mapping=True, online_time_idx=time_idx)
                         else:
                             progress_bar.update(1)
@@ -455,7 +455,7 @@ def dataset_capture_loop(reader: DataReader, save_path: Path, overwrite: bool, n
                         # Report Mapping Progress
                         progress_bar = tqdm(range(1), desc=f"Mapping Result Time Step: {time_idx}")
                         with torch.no_grad():
-                            report_progress(params, curr_data, 1, progress_bar, time_idx, sil_thres=config['mapping']['sil_thres'], 
+                            report_progress(params, curr_data, 1, progress_bar, time_idx, sil_thres=config['mapping']['sil_thres'],
                                             mapping=True, online_time_idx=time_idx)
                         progress_bar.close()
                     except:
@@ -479,7 +479,7 @@ def dataset_capture_loop(reader: DataReader, save_path: Path, overwrite: bool, n
                     # Add to keyframe list
                     keyframe_list.append(curr_keyframe)
                     keyframe_time_indices.append(time_idx)
-            
+
             # Checkpoint every iteration
             if time_idx % config["checkpoint_interval"] == 0 and config['save_checkpoints']:
                 ckpt_output_dir = save_path.joinpath("checkpoints")
@@ -498,7 +498,7 @@ def dataset_capture_loop(reader: DataReader, save_path: Path, overwrite: bool, n
             # Update frame count
             total_frames += 1
             time_idx = total_frames
-    
+
     # Compute Average Runtimes
     if tracking_iter_time_count == 0:
         tracking_iter_time_count = 1
@@ -526,7 +526,7 @@ def dataset_capture_loop(reader: DataReader, save_path: Path, overwrite: bool, n
         params['gt_w2c_all_frames'].append(gt_w2c_tensor.detach().cpu().numpy())
     params['gt_w2c_all_frames'] = np.stack(params['gt_w2c_all_frames'], axis=0)
     params['keyframe_time_indices'] = np.array(keyframe_time_indices)
-    
+
     # Save Parameters
     output_dir = os.path.join(config["workdir"], config["run_name"])
     save_params(params, output_dir)
@@ -563,5 +563,5 @@ if __name__ == "__main__":
     config = experiment.config
     if "gaussian_distribution" not in config:
         config['gaussian_distribution'] = "isotropic"
-    dataset_capture_loop(reader, Path(config['workdir']), config['overwrite'], 
+    dataset_capture_loop(reader, Path(config['workdir']), config['overwrite'],
                          config['num_frames'], config['depth_scale'], config)

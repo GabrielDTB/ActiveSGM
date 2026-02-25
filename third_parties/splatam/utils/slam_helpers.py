@@ -1,6 +1,6 @@
 import torch
 import torch.nn.functional as F
-from utils.slam_external import build_rotation
+from .slam_external import build_rotation
 
 def l1_loss_v1(x, y):
     return torch.abs((x - y)).mean()
@@ -209,7 +209,7 @@ def get_depth_and_silhouette(pts_3D, w2c):
     depth_silhouette[:, 0] = depth_z.squeeze(-1)
     depth_silhouette[:, 1] = 1.0
     depth_silhouette[:, 2] = depth_z_sq.squeeze(-1)
-    
+
     return depth_silhouette
 
 
@@ -252,13 +252,13 @@ def transformed_params2depthplussilhouette(params, w2c, transformed_gaussians):
 def transform_to_frame(params, time_idx, gaussians_grad, camera_grad):
     """
     Function to transform Isotropic or Anisotropic Gaussians from world frame to camera frame.
-    
+
     Args:
         params: dict of parameters
         time_idx: time index to transform to
         gaussians_grad: enable gradients for Gaussians
         camera_grad: enable gradients for camera pose
-    
+
     Returns:
         transformed_gaussians: Transformed Gaussians (dict containing means3D & unnorm_rotations)
     """
@@ -278,7 +278,7 @@ def transform_to_frame(params, time_idx, gaussians_grad, camera_grad):
         transform_rots = False # Isotropic Gaussians
     else:
         transform_rots = True # Anisotropic Gaussians
-    
+
     # Get Centers and Unnorm Rots of Gaussians in World Frame
     if gaussians_grad:
         pts = params['means3D']
@@ -286,7 +286,7 @@ def transform_to_frame(params, time_idx, gaussians_grad, camera_grad):
     else:
         pts = params['means3D'].detach()
         unnorm_rots = params['unnorm_rotations'].detach()
-    
+
     transformed_gaussians = {}
     # Transform Centers of Gaussians to Camera Frame
     pts_ones = torch.ones(pts.shape[0], 1).cuda().float()

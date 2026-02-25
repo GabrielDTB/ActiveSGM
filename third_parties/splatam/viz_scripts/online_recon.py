@@ -18,10 +18,10 @@ import torch.nn.functional as F
 from diff_gaussian_rasterization import GaussianRasterizer as Renderer
 from diff_gaussian_rasterization import GaussianRasterizationSettings as Camera
 
-from utils.common_utils import seed_everything
-from utils.recon_helpers import setup_camera
-from utils.slam_helpers import get_depth_and_silhouette
-from utils.slam_external import build_rotation
+from ..utils.common_utils import seed_everything
+from ..utils.recon_helpers import setup_camera
+from ..utils.slam_helpers import get_depth_and_silhouette
+from ..utils.slam_external import build_rotation
 
 
 def load_camera(cfg, scene_path):
@@ -54,9 +54,9 @@ def load_scene_data(scene_path):
         rel_w2c[:3, :3] = build_rotation(cam_rot)
         rel_w2c[:3, 3] = cam_tran
         all_w2cs.append(rel_w2c.cpu().numpy())
-    
+
     keys = [k for k in all_params.keys() if
-            k not in ['org_width', 'org_height', 'w2c', 'intrinsics', 
+            k not in ['org_width', 'org_height', 'w2c', 'intrinsics',
                       'gt_w2c_all_frames', 'cam_unnorm_rots',
                       'cam_trans', 'keyframe_time_indices']]
 
@@ -73,7 +73,7 @@ def get_rendervars(params, w2c, curr_timestep):
     params_timesteps = params['timestep']
     selected_params_idx = params_timesteps <= curr_timestep
     keys = [k for k in params.keys() if
-            k not in ['org_width', 'org_height', 'w2c', 'intrinsics', 
+            k not in ['org_width', 'org_height', 'w2c', 'intrinsics',
                       'gt_w2c_all_frames', 'cam_unnorm_rots',
                       'cam_trans', 'keyframe_time_indices']]
     selected_params = deepcopy(params)
@@ -162,7 +162,7 @@ def rgbd2pcd(color, depth, w2c, intrinsics, cfg):
 
     # Convert to Open3D format
     pts = o3d.utility.Vector3dVector(pts.contiguous().double().cpu().numpy())
-    
+
     # Colorize point cloud
     if cfg['render_mode'] == 'depth':
         cols = z_depth
@@ -188,7 +188,7 @@ def visualize(scene_path, cfg):
     params, all_w2cs = load_scene_data(scene_path)
     print(params['means3D'].shape)
     vis = o3d.visualization.Visualizer()
-    vis.create_window(width=int(cfg['viz_w'] * cfg['view_scale']), 
+    vis.create_window(width=int(cfg['viz_w'] * cfg['view_scale']),
                       height=int(cfg['viz_h'] * cfg['view_scale']),
                       visible=True)
 
@@ -211,7 +211,7 @@ def visualize(scene_path, cfg):
     norm_factor = 0.5
     total_num_lines = num_t - 1
     line_colormap = plt.get_cmap('cool')
-    
+
     # Initialize View Control
     view_k = k * cfg['view_scale']
     view_k[2, 2] = 1
@@ -254,7 +254,7 @@ def visualize(scene_path, cfg):
         vis.add_geometry(new_frustum)
         prev_frustum = new_frustum
         cam_centers.append(np.linalg.inv(all_w2cs[curr_timestep])[:3, 3])
-        
+
         # Update Camera Trajectory
         if len(cam_centers) > 1 and curr_timestep > 0:
             num_lines = [1]
@@ -293,7 +293,7 @@ def visualize(scene_path, cfg):
             if cfg['show_sil']:
                 im = (1-sil).repeat(3, 1, 1)
             pts, cols = rgbd2pcd(im, depth, view_w2c, k, cfg)
-        
+
         # Update Gaussians
         pcd.points = pts
         pcd.colors = cols
@@ -321,7 +321,7 @@ def visualize(scene_path, cfg):
             if cfg['show_sil']:
                 im = (1-sil).repeat(3, 1, 1)
             pts, cols = rgbd2pcd(im, depth, w2c, k, cfg)
-        
+
         # Update Gaussians
         pcd.points = pts
         pcd.colors = cols
@@ -330,7 +330,7 @@ def visualize(scene_path, cfg):
         if not vis.poll_events():
             break
         vis.update_renderer()
-    
+
     # Cleanup
     vis.destroy_window()
     del view_control

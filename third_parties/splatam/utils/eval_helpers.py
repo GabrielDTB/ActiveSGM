@@ -6,10 +6,10 @@ from tqdm import tqdm
 import numpy as np
 import matplotlib.pyplot as plt
 
-from datasets.gradslam_datasets.geometryutils import relative_transformation
-from utils.recon_helpers import setup_camera
-from utils.slam_external import build_rotation, calc_psnr
-from utils.slam_helpers import (
+from ..datasets.gradslam_datasets.geometryutils import relative_transformation
+from .recon_helpers import setup_camera
+from .slam_external import build_rotation, calc_psnr
+from .slam_helpers import (
     transform_to_frame, transformed_params2rendervar, transformed_params2depthplussilhouette,
     quat_mult, matrix_to_quaternion
 )
@@ -59,8 +59,8 @@ def align(model, data):
 
 def evaluate_ate(gt_traj, est_traj):
     """
-    Input : 
-        gt_traj: list of 4x4 matrices 
+    Input :
+        gt_traj: list of 4x4 matrices
         est_traj: list of 4x4 matrices
         len(gt_traj) == len(est_traj)
     """
@@ -100,14 +100,14 @@ def report_loss(losses, wandb_run, wandb_step, tracking=False, mapping=False):
             frame_opt_loss_dict[f"Per Iteration Current Frame Optimization/{k}"] = v
         frame_opt_loss_dict['Per Iteration Current Frame Optimization/step'] = wandb_step
         wandb_run.log(frame_opt_loss_dict)
-    
+
     # Increment wandb step
     wandb_step += 1
     return wandb_step
-        
+
 
 def plot_rgbd_silhouette(color, depth, rastered_color, rastered_depth, presence_sil_mask, diff_depth_l1,
-                         psnr, depth_l1, fig_title, plot_dir=None, plot_name=None, 
+                         psnr, depth_l1, fig_title, plot_dir=None, plot_name=None,
                          save_plot=False, wandb_run=None, wandb_step=None, wandb_title=None, diff_rgb=None):
     # Determine Plot Aspect Ratio
     aspect_ratio = color.shape[2] / color.shape[1]
@@ -149,7 +149,7 @@ def plot_rgbd_silhouette(color, depth, rastered_color, rastered_depth, presence_
     plt.close()
 
 
-def report_progress(params, data, i, progress_bar, iter_time_idx, sil_thres, every_i=1, qual_every_i=1, 
+def report_progress(params, data, i, progress_bar, iter_time_idx, sil_thres, every_i=1, qual_every_i=1,
                     tracking=False, mapping=False, wandb_run=None, wandb_step=None, wandb_save_qual=False, online_time_idx=None,
                     global_logging=True):
     if i % every_i == 0 or i == 1:
@@ -167,7 +167,7 @@ def report_progress(params, data, i, progress_bar, iter_time_idx, sil_thres, eve
             # Get list of gt poses
             gt_w2c_list = data['iter_gt_w2c_list']
             valid_gt_w2c_list = []
-            
+
             # Get latest trajectory
             latest_est_w2c = data['w2c']
             latest_est_w2c_list = []
@@ -198,23 +198,23 @@ def report_progress(params, data, i, progress_bar, iter_time_idx, sil_thres, eve
                 rel_pt_error = torch.sqrt((rel_gt_w2c[0,3] - rel_est_w2c[0,3])**2 + (rel_gt_w2c[1,3] - rel_est_w2c[1,3])**2 + (rel_gt_w2c[2,3] - rel_est_w2c[2,3])**2)
             else:
                 rel_pt_error = torch.zeros(1).float()
-            
+
             # Calculate ATE RMSE
             ate_rmse = evaluate_ate(gt_w2c_list, latest_est_w2c_list)
             ate_rmse = np.round(ate_rmse, decimals=6)
             if wandb_run is not None:
-                tracking_log = {f"{stage}/Latest Pose Error":iter_pt_error, 
+                tracking_log = {f"{stage}/Latest Pose Error":iter_pt_error,
                                f"{stage}/Latest Relative Pose Error":rel_pt_error,
                                f"{stage}/ATE RMSE":ate_rmse}
 
         # Get current frame Gaussians
-        transformed_gaussians = transform_to_frame(params, iter_time_idx, 
+        transformed_gaussians = transform_to_frame(params, iter_time_idx,
                                                    gaussians_grad=False,
                                                    camera_grad=False)
 
         # Initialize Render Variables
         rendervar = transformed_params2rendervar(params, transformed_gaussians)
-        depth_sil_rendervar = transformed_params2depthplussilhouette(params, data['w2c'], 
+        depth_sil_rendervar = transformed_params2depthplussilhouette(params, data['w2c'],
                                                                      transformed_gaussians)
         depth_sil, _, _, = Renderer(raster_settings=data['cam'])(**depth_sil_rendervar)
         rastered_depth = depth_sil[0, :, :].unsqueeze(0)
@@ -252,7 +252,7 @@ def report_progress(params, data, i, progress_bar, iter_time_idx, sil_thres, eve
         elif mapping:
             progress_bar.set_postfix({f"Time-Step: {online_time_idx} | Frame {data['id']} | PSNR: {psnr:.{7}} | Depth RMSE: {rmse:.{7}} | L1": f"{depth_l1:.{7}}"})
             progress_bar.update(every_i)
-        
+
         if wandb_run is not None:
             wandb_log = {f"{stage}/PSNR": psnr,
                          f"{stage}/Depth RMSE": rmse,
@@ -261,7 +261,7 @@ def report_progress(params, data, i, progress_bar, iter_time_idx, sil_thres, eve
             if tracking:
                 wandb_log = {**wandb_log, **tracking_log}
             wandb_run.log(wandb_log)
-        
+
         if wandb_save_qual and (i % qual_every_i == 0 or i == 1):
             # Silhouette Mask
             presence_sil_mask = presence_sil_mask.detach().cpu().numpy()
@@ -272,7 +272,7 @@ def report_progress(params, data, i, progress_bar, iter_time_idx, sil_thres, eve
             else:
                 fig_title = f"Time-Step: {online_time_idx} | Iter: {i} | Frame: {data['id']}"
             plot_rgbd_silhouette(data['im'], data['depth'], im, rastered_depth, presence_sil_mask, diff_depth_l1,
-                                 psnr, depth_l1, fig_title, wandb_run=wandb_run, wandb_step=wandb_step, 
+                                 psnr, depth_l1, fig_title, wandb_run=wandb_run, wandb_step=wandb_step,
                                  wandb_title=f"{stage} Qual Viz")
 
 
@@ -304,27 +304,27 @@ def eval_online(dataset, all_params, num_frames, eval_online_dir, sil_thres,
             first_frame_w2c = torch.linalg.inv(pose)
             # Setup Camera
             cam = setup_camera(color.shape[2], color.shape[1], intrinsics.cpu().numpy(), first_frame_w2c.detach().cpu().numpy())
-        
+
         # Define current frame data
         curr_data = {'cam': cam, 'im': color, 'depth': depth, 'id': time_idx, 'intrinsics': intrinsics, 'w2c': first_frame_w2c}
 
         # Get current frame Gaussians
-        transformed_gaussians = transform_to_frame(params, time_idx, 
-                                                   gaussians_grad=False, 
+        transformed_gaussians = transform_to_frame(params, time_idx,
+                                                   gaussians_grad=False,
                                                    camera_grad=False)
 
         # Initialize Render Variables
         rendervar = transformed_params2rendervar(params, transformed_gaussians)
         depth_sil_rendervar = transformed_params2depthplussilhouette(params, first_frame_w2c,
                                                                      transformed_gaussians)
-        
+
         # Render Depth & Silhouette
         depth_sil, _, _, = Renderer(raster_settings=curr_data['cam'])(**depth_sil_rendervar)
         rastered_depth = depth_sil[0, :, :].unsqueeze(0)
         valid_depth_mask = (curr_data['depth'] > 0)
         silhouette = depth_sil[1, :, :]
         presence_sil_mask = (silhouette > sil_thres)
-        
+
         # Render RGB and Calculate PSNR
         im, radius, _, = Renderer(raster_settings=curr_data['cam'])(**rendervar)
         if mapping_iters==0 and not add_new_gaussians:
@@ -357,15 +357,15 @@ def eval_online(dataset, all_params, num_frames, eval_online_dir, sil_thres,
         presence_sil_mask = presence_sil_mask.detach().cpu().numpy()
         if wandb_run is None:
             plot_rgbd_silhouette(color, depth, im, rastered_depth, presence_sil_mask, diff_depth_l1,
-                                 psnr, depth_l1, fig_title, plot_dir, 
+                                 psnr, depth_l1, fig_title, plot_dir,
                                  plot_name=plot_name, save_plot=True)
         elif wandb_save_qual:
             plot_rgbd_silhouette(color, depth, im, rastered_depth, presence_sil_mask, diff_depth_l1,
-                                 psnr, depth_l1, fig_title, plot_dir, 
+                                 psnr, depth_l1, fig_title, plot_dir,
                                  plot_name=plot_name, save_plot=True,
-                                 wandb_run=wandb_run, wandb_step=None, 
+                                 wandb_run=wandb_run, wandb_step=None,
                                  wandb_title="Online Eval/Qual Viz")
-    
+
     # Compute Average Metrics
     psnr_list = np.array(psnr_list)
     rmse_list = np.array(rmse_list)
@@ -378,7 +378,7 @@ def eval_online(dataset, all_params, num_frames, eval_online_dir, sil_thres,
     print("Online Average Depth L1: {:.2f}".format(avg_l1))
 
     if wandb_run is not None:
-        wandb_run.log({"Final Stats/Online Average PSNR": avg_psnr, 
+        wandb_run.log({"Final Stats/Online Average PSNR": avg_psnr,
                        "Final Stats/Online Average Depth RMSE": avg_rmse,
                        "Final Stats/Online Average Depth L1": avg_l1,
                        "Final Stats/step": 1})
@@ -405,7 +405,7 @@ def eval_online(dataset, all_params, num_frames, eval_online_dir, sil_thres,
     plt.close()
 
 
-def eval(dataset, final_params, num_frames, eval_dir, sil_thres, 
+def eval(dataset, final_params, num_frames, eval_dir, sil_thres,
          mapping_iters, add_new_gaussians, wandb_run=None, wandb_save_qual=False, eval_every=1, save_frames=False):
     print("Evaluating Final Parameters ...")
     psnr_list = []
@@ -442,16 +442,16 @@ def eval(dataset, final_params, num_frames, eval_dir, sil_thres,
             first_frame_w2c = torch.linalg.inv(pose)
             # Setup Camera
             cam = setup_camera(color.shape[2], color.shape[1], intrinsics.cpu().numpy(), first_frame_w2c.detach().cpu().numpy())
-        
+
         # Skip frames if not eval_every
         if time_idx != 0 and (time_idx+1) % eval_every != 0:
             continue
 
         # Get current frame Gaussians
-        transformed_gaussians = transform_to_frame(final_params, time_idx, 
-                                                   gaussians_grad=False, 
+        transformed_gaussians = transform_to_frame(final_params, time_idx,
+                                                   gaussians_grad=False,
                                                    camera_grad=False)
- 
+
         # Define current frame data
         curr_data = {'cam': cam, 'im': color, 'depth': depth, 'id': time_idx, 'intrinsics': intrinsics, 'w2c': first_frame_w2c}
 
@@ -469,7 +469,7 @@ def eval(dataset, final_params, num_frames, eval_dir, sil_thres,
         rastered_depth = rastered_depth * valid_depth_mask
         silhouette = depth_sil[1, :, :]
         presence_sil_mask = (silhouette > sil_thres)
-        
+
         # Render RGB and Calculate PSNR
         im, radius, _, = Renderer(raster_settings=curr_data['cam'])(**rendervar)
         if mapping_iters==0 and not add_new_gaussians:
@@ -479,7 +479,7 @@ def eval(dataset, final_params, num_frames, eval_dir, sil_thres,
             weighted_im = im * valid_depth_mask
             weighted_gt_im = curr_data['im'] * valid_depth_mask
         psnr = calc_psnr(weighted_im, weighted_gt_im).mean()
-        ssim = ms_ssim(weighted_im.unsqueeze(0).cpu(), weighted_gt_im.unsqueeze(0).cpu(), 
+        ssim = ms_ssim(weighted_im.unsqueeze(0).cpu(), weighted_gt_im.unsqueeze(0).cpu(),
                         data_range=1.0, size_average=True)
         lpips_score = loss_fn_alex(torch.clamp(weighted_im.unsqueeze(0), 0.0, 1.0),
                                     torch.clamp(weighted_gt_im.unsqueeze(0), 0.0, 1.0)).item()
@@ -526,20 +526,20 @@ def eval(dataset, final_params, num_frames, eval_dir, sil_thres,
             depth_colormap = cv2.applyColorMap((normalized_depth * 255).astype(np.uint8), cv2.COLORMAP_JET)
             cv2.imwrite(os.path.join(rgb_dir, "gt_{:04d}.png".format(time_idx)), cv2.cvtColor(viz_gt_im*255, cv2.COLOR_RGB2BGR))
             cv2.imwrite(os.path.join(depth_dir, "gt_{:04d}.png".format(time_idx)), depth_colormap)
-        
+
         # Plot the Ground Truth and Rasterized RGB & Depth, along with Silhouette
         fig_title = "Time Step: {}".format(time_idx)
         plot_name = "%04d" % time_idx
         presence_sil_mask = presence_sil_mask.detach().cpu().numpy()
         if wandb_run is None:
             plot_rgbd_silhouette(color, depth, im, rastered_depth_viz, presence_sil_mask, diff_depth_l1,
-                                 psnr, depth_l1, fig_title, plot_dir, 
+                                 psnr, depth_l1, fig_title, plot_dir,
                                  plot_name=plot_name, save_plot=True)
         elif wandb_save_qual:
             plot_rgbd_silhouette(color, depth, im, rastered_depth_viz, presence_sil_mask, diff_depth_l1,
-                                 psnr, depth_l1, fig_title, plot_dir, 
+                                 psnr, depth_l1, fig_title, plot_dir,
                                  plot_name=plot_name, save_plot=True,
-                                 wandb_run=wandb_run, wandb_step=None, 
+                                 wandb_run=wandb_run, wandb_step=None,
                                  wandb_title="Eval/Qual Viz")
 
     try:
@@ -573,7 +573,7 @@ def eval(dataset, final_params, num_frames, eval_dir, sil_thres,
     except:
         ate_rmse = 100.0
         print('Failed to evaluate trajectory with alignment.')
-    
+
     # Compute Average Metrics
     psnr_list = np.array(psnr_list)
     rmse_list = np.array(rmse_list)
@@ -592,10 +592,10 @@ def eval(dataset, final_params, num_frames, eval_dir, sil_thres,
     print("Average LPIPS: {:.3f}".format(avg_lpips))
 
     if wandb_run is not None:
-        wandb_run.log({"Final Stats/Average PSNR": avg_psnr, 
+        wandb_run.log({"Final Stats/Average PSNR": avg_psnr,
                        "Final Stats/Average Depth RMSE": avg_rmse,
                        "Final Stats/Average Depth L1": avg_l1,
-                       "Final Stats/Average MS-SSIM": avg_ssim, 
+                       "Final Stats/Average MS-SSIM": avg_ssim,
                        "Final Stats/Average LPIPS": avg_lpips,
                        "Final Stats/step": 1})
 
@@ -623,7 +623,7 @@ def eval(dataset, final_params, num_frames, eval_dir, sil_thres,
     plt.close()
 
 
-def eval_nvs(dataset, final_params, num_frames, eval_dir, sil_thres, 
+def eval_nvs(dataset, final_params, num_frames, eval_dir, sil_thres,
          mapping_iters, add_new_gaussians, wandb_run=None, wandb_save_qual=False, eval_every=1, save_frames=False):
     print("Evaluating Final Parameters for Novel View Synthesis ...")
     psnr_list = []
@@ -661,7 +661,7 @@ def eval_nvs(dataset, final_params, num_frames, eval_dir, sil_thres,
             cam = setup_camera(color.shape[2], color.shape[1], intrinsics.cpu().numpy(), first_frame_w2c.detach().cpu().numpy())
             # Skip first train frame eval for NVS
             continue
-        
+
         # Skip frames if not eval_every (indexing accounts for first training frame)
         test_time_idx = time_idx - 1
         if test_time_idx != 0 and (test_time_idx+1) % eval_every != 0:
@@ -688,7 +688,7 @@ def eval_nvs(dataset, final_params, num_frames, eval_dir, sil_thres,
             transformed_gaussians['unnorm_rotations'] = transformed_rots
         else:
             transformed_gaussians['unnorm_rotations'] = final_params['unnorm_rotations'].detach()
- 
+
         # Define current frame data
         curr_data = {'cam': cam, 'im': color, 'depth': depth, 'id': time_idx, 'intrinsics': intrinsics, 'w2c': first_frame_w2c}
 
@@ -714,7 +714,7 @@ def eval_nvs(dataset, final_params, num_frames, eval_dir, sil_thres,
             valid_nvs_frames.append(False)
         else:
             valid_nvs_frames.append(True)
-        
+
         # Render RGB and Calculate PSNR
         im, radius, _, = Renderer(raster_settings=curr_data['cam'])(**rendervar)
         if mapping_iters==0 and not add_new_gaussians:
@@ -725,7 +725,7 @@ def eval_nvs(dataset, final_params, num_frames, eval_dir, sil_thres,
             weighted_gt_im = curr_data['im'] * valid_depth_mask
         diff_rgb = torch.abs(weighted_im - weighted_gt_im).mean(dim=0).detach()
         psnr = calc_psnr(weighted_im, weighted_gt_im).mean()
-        ssim = ms_ssim(weighted_im.unsqueeze(0).cpu(), weighted_gt_im.unsqueeze(0).cpu(), 
+        ssim = ms_ssim(weighted_im.unsqueeze(0).cpu(), weighted_gt_im.unsqueeze(0).cpu(),
                         data_range=1.0, size_average=True)
         lpips_score = loss_fn_alex(torch.clamp(weighted_im.unsqueeze(0), 0.0, 1.0),
                                     torch.clamp(weighted_gt_im.unsqueeze(0), 0.0, 1.0)).item()
@@ -772,20 +772,20 @@ def eval_nvs(dataset, final_params, num_frames, eval_dir, sil_thres,
             depth_colormap = cv2.applyColorMap((normalized_depth * 255).astype(np.uint8), cv2.COLORMAP_JET)
             cv2.imwrite(os.path.join(rgb_dir, "gt_{:04d}.png".format(test_time_idx)), cv2.cvtColor(viz_gt_im*255, cv2.COLOR_RGB2BGR))
             cv2.imwrite(os.path.join(depth_dir, "gt_{:04d}.png".format(test_time_idx)), depth_colormap)
-        
+
         # Plot the Ground Truth and Rasterized RGB & Depth, along with Silhouette
         fig_title = "Time Step: {}".format(test_time_idx)
         plot_name = "%04d" % test_time_idx
         presence_sil_mask = presence_sil_mask.detach().cpu().numpy()
         if wandb_run is None:
             plot_rgbd_silhouette(color, depth, im, rastered_depth_viz, presence_sil_mask, diff_depth_l1,
-                                 psnr, depth_l1, fig_title, plot_dir, 
+                                 psnr, depth_l1, fig_title, plot_dir,
                                  plot_name=plot_name, save_plot=True)
         elif wandb_save_qual:
             plot_rgbd_silhouette(color, depth, im, rastered_depth_viz, presence_sil_mask, diff_depth_l1,
-                                 psnr, depth_l1, fig_title, plot_dir, 
+                                 psnr, depth_l1, fig_title, plot_dir,
                                  plot_name=plot_name, save_plot=True,
-                                 wandb_run=wandb_run, wandb_step=None, 
+                                 wandb_run=wandb_run, wandb_step=None,
                                  wandb_title="Eval/Qual Viz")
 
     # Compute Average Metrics based on valid NVS frames
@@ -807,10 +807,10 @@ def eval_nvs(dataset, final_params, num_frames, eval_dir, sil_thres,
     print("Average LPIPS: {:.3f}".format(avg_lpips))
 
     if wandb_run is not None:
-        wandb_run.log({"Final Stats/Average PSNR": avg_psnr, 
+        wandb_run.log({"Final Stats/Average PSNR": avg_psnr,
                        "Final Stats/Average Depth RMSE": avg_rmse,
                        "Final Stats/Average Depth L1": avg_l1,
-                       "Final Stats/Average MS-SSIM": avg_ssim, 
+                       "Final Stats/Average MS-SSIM": avg_ssim,
                        "Final Stats/Average LPIPS": avg_lpips,
                        "Final Stats/step": 1})
 
